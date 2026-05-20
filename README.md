@@ -10,7 +10,7 @@ OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得�
 - **头脑风暴前置**：需求模糊时先发散和收敛，再进入规格阶段
 - **需求先行**：强制先产出规格文档再写代码，避免 AI 闷头实现方向跑偏
 - **纯编排层**：不重写 OpenSpec/Superpowers 功能，只做调用和衔接
-- **断点恢复**：结构化状态文件 + 实际文件双重验证，任何中断点可精确恢复
+- **DAG 路由与断点恢复**：通过 `hyperspec-dag.json` + 文件证据计算下一步，状态文件只作为缓存
 - **智能执行**：根据任务数量、依赖关系、跨模块性等多因子选择最优执行模式
 - **多语言支持**：自动适配 Java/Node/Go/Rust/Python 等不同技术栈的编译和测试命令
 
@@ -72,14 +72,14 @@ python scripts/profiler.py --root /path/to/project --write-state --verify-compil
 
 默认只输出 JSON，不修改项目。加 `--write-state` 后会在目标项目根目录生成 `.hyperspec-state.yaml`。加 `--verify-compile` 后会实际运行推导出的编译命令；如果该命令需要下载依赖或访问网络，Codex 需要先获得用户授权。
 
-也提供一个 OpenSpec 风格的 DAG 状态计算脚本：
+HyperSpec 的主路由由 OpenSpec 风格的 DAG 状态计算脚本驱动：
 
 ```bash
 python scripts/dag_status.py --root /path/to/project
 python scripts/dag_status.py --root /path/to/project --format mermaid
 ```
 
-`dag_status.py` 读取 `hyperspec-dag.json` 和实际文件状态，输出 `nodes`、`next`、`missingDeps`、`isComplete` 等字段。它把 `.hyperspec-state.yaml` 当作缓存，优先用文件证据计算当前 DAG 节点状态。
+`dag_status.py` 读取 `hyperspec-dag.json` 和实际文件状态，输出 `nodes`、`next`、`missingDeps`、`isComplete` 等字段。执行 HyperSpec 时优先读取 `next[0]` 选择阶段文件；`.hyperspec-state.yaml` 只作为缓存和兼容旧流程的辅助输入。
 
 ## 使用方式
 
@@ -108,8 +108,8 @@ skill 会自动检测项目状态，判断应进入哪个阶段。你也可以�
 HyperSpec 是**纯编排层**，只做以下四件事：
 
 1. **项目感知** — 自动探测语言/框架/构建工具，生成 `project_profile` 驱动后续阶段的自适应行为
-2. **状态检测** — 通过结构化状态文件（`.hyperspec-state.yaml`）+ 实际文件验证确定当前阶段和断点位置
-3. **阶段路由** — 加载对应 prompt 文件，按其中的流程调用原生 skill
+2. **状态检测** — 通过 `hyperspec-dag.json` + 实际文件证据计算 DAG 节点状态
+3. **阶段路由** — 根据 `dag_status.py` 的 `next[0]` 加载对应 prompt 文件，按其中的流程调用原生 skill
 4. **Commit 纪律** — 每个 task/fix 完成后自动 commit，编译前置，不做 push
 
 HyperSpec **不做**：
@@ -234,9 +234,15 @@ HyperSpec 根据多因子分析选择最优执行模式：
 
 ## 状态管理与断点恢复
 
-### 结构化状态文件
+### DAG 路由与状态文件
 
-HyperSpec 使用 `.hyperspec-state.yaml` 跟踪当前进度：
+HyperSpec 优先使用 DAG 计算当前进度：
+
+```bash
+python scripts/dag_status.py --root <项目根目录>
+```
+
+返回的 `next[0]` 是主路由入口。`.hyperspec-state.yaml` 仍用于记录当前阶段、checkpoint 和 project_profile，但它不是权威来源：
 
 ```yaml
 version: 1
@@ -253,11 +259,26 @@ project_profile:
   has_ci: true
 ```
 
-**安全策略**：状态文件用于快速路由，但在关键节点验证实际文件状态。两者冲突时以实际文件为准。
+**安全策略**：DAG 状态由实际文件证据计算；状态文件只是缓存。两者冲突时，以 `dag_status.py` 基于文件系统得出的结果为准。
 
 ### 自动状态检测
 
-重新运行 `/hyperspec` 时，skill 会自动检查状态文件和实际项目文件状态：
+重新运行 `/hyperspec` 时，skill 会先运行 `dag_status.py`，再根据 `next[0]` 路由：
+
+| DAG node | 阶段文件 |
+|---------|----------|
+| `project-profile` | `propose.md`（只执行项目分析步骤） |
+| `brainstorm` | `brainstorm.md` |
+| `openspec-artifacts` | `propose.md` |
+| `implementation-plan` | `propose.md` |
+| `implementation` | `apply.md` |
+| `verification` | `apply.md` |
+| `review` | `apply.md` |
+| `consistency` | `archive.md` |
+| `archive` | `archive.md` |
+| `cleanup` | `archive.md` |
+
+下面是 DAG 脚本不可用或恢复旧项目时的降级判断：
 
 | 项目状态 | 进入阶段 |
 |----------|----------|
@@ -275,7 +296,7 @@ project_profile:
 
 - **brainstorm 阶段：** 通过 checkpoint 和 `.hyperspec-brainstorm.md` 恢复到发散或收敛完成状态
 - **propose 阶段：** 通过 checkpoint 精确恢复到需求确认、openspec 生成、计划生成等具体步骤
-- **apply 阶段：** 通过 checkpoint 精确恢复到具体 task，状态文件和 checkbox 双重验证
+- **apply 阶段：** 通过 DAG 节点、checkpoint 和 checkbox 共同恢复到具体 task
 - **archive 阶段：** 通过 checkpoint 恢复到验证、归档、分支收尾等具体步骤
 
 ## 项目分析器
@@ -332,14 +353,14 @@ HyperSpec 首次运行时自动探测项目特征：
 
 ## 设计原则
 
-- **纯编排层：** HyperSpec 只做项目感知、状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能
+- **纯编排层：** HyperSpec 只做项目感知、DAG 状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能
 - **先发散再收敛：** 模糊需求先进入 brainstorm，明确需求可直接进入 propose
 - **规格与实现分离：** propose 阶段只产出文档，apply 阶段只写代码，各自有硬门禁止越界
 - **项目感知自适应：** 根据项目技术栈自动调整编译命令、测试策略、执行模式
 - **每个阶段有明确出口条件：** 不满足出口条件就不能进入下一阶段
-- **可中断、可恢复：** 结构化状态文件 + 实际文件双重验证，支持从任何断点精确恢复
+- **可中断、可恢复：** DAG 文件证据 + 状态缓存双重验证，支持从任何断点精确恢复
 - **用户意图优先：** 自动检测只是默认行为，用户显式指定阶段时以用户意图为准
-- **实际文件为 ground truth：** 状态文件是缓存，实际文件状态是权威，冲突时以实际文件为准
+- **实际文件为 ground truth：** DAG 由文件证据计算，状态文件是缓存，冲突时以 `dag_status.py` 结果为准
 
 ## 常见问题
 
@@ -357,7 +378,7 @@ apply 阶段的硬门禁止修改规格文档。你可以记录问题继续实�
 
 ## 状态机逻辑
 
-HyperSpec 运行期间用 `.hyperspec-state.yaml` 记录当前阶段：
+HyperSpec 的主状态机由 `hyperspec-dag.json` 定义，并由 `scripts/dag_status.py` 计算当前节点。运行期间 `.hyperspec-state.yaml` 仍记录当前阶段：
 
 ```yaml
 version: 1
@@ -374,9 +395,9 @@ project_profile:
   has_ci: ...
 ```
 
-核心原则：**状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以实际文件为准并修正状态。
+核心原则：**DAG 计算结果是主路由，状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以 `dag_status.py` 基于文件系统得出的结果为准。
 
-HyperSpec 的状态机也可以通过 `hyperspec-dag.json` 表达为 OpenSpec 风格 DAG。用以下命令查看当前节点：
+用以下命令查看当前 DAG 节点：
 
 ```bash
 python scripts/dag_status.py --root .
