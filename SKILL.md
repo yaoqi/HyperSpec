@@ -254,4 +254,4 @@ project_profile:
 | apply 最终确认完成 | `phase: archive`，`checkpoint: apply-done` |
 | archive 一致性验证通过 | `checkpoint: consistency-verified` |
 | archive 归档完成 | `checkpoint: archived` |
-| archive 全部完成 | `checkpoint: done`，删除状态文件 |
+| archive 全部完成 | 将 `.hyperspec-brainstorm.md` 移动到归档目录的 `brainstorm.md`（若存在），`checkpoint: done`，删除状态文件 |

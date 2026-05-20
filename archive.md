@@ -104,8 +104,21 @@
 - 规格更新了什么
 - 归档位置
 
+**归档 brainstorm 摘要：**
+如果项目根目录存在 `.hyperspec-brainstorm.md`，将其移动到本次变更的归档目录：
+
+```text
+openspec/changes/archive/<YYYY-MM-DD>-<变更名>/brainstorm.md
+```
+
+规则：
+- 仅在归档目录已确认存在后移动，避免丢失需求决策上下文
+- 如果目标文件已存在，先比较内容；一致则删除根目录副本，不一致则保留根目录副本并提示用户确认
+- 如果本次没有经过 brainstorm 阶段，`.hyperspec-brainstorm.md` 不存在则跳过
+- 不将 `.hyperspec-brainstorm.md` 长期留在项目根目录，避免下次变更误用过期摘要
+
 **清理状态文件：**
-更新 `.hyperspec-state.yaml`：`checkpoint: done`。如果用户接受 HyperSpec 自动 commit 纪律，使用 `git rm .hyperspec-state.yaml` 将其从 git 追踪中移除，然后 commit（message: `chore: hyperspec <变更名> 完成`）。如果用户未确认自动 commit，则停在可提交状态并报告需要提交的文件。
+更新 `.hyperspec-state.yaml`：`checkpoint: done`。如果用户接受 HyperSpec 自动 commit 纪律，使用 `git rm .hyperspec-state.yaml` 将其从 git 追踪中移除；如果 `.hyperspec-brainstorm.md` 已移动到归档目录，也将该移动纳入同一个收尾 commit（message: `chore: hyperspec <变更名> 完成`）。如果用户未确认自动 commit，则停在可提交状态并报告需要提交的文件。
 
 ## 出口条件
 
@@ -114,6 +127,7 @@
 - 如使用了 worktree：用户已选择分支处理方式且 worktree 已处理
 - 如未使用 worktree：代码已提交或用户已确认稍后处理
 - `.hyperspec-state.yaml` 已删除
+- 如存在 `.hyperspec-brainstorm.md`：已移动到归档目录的 `brainstorm.md`，或用户确认保留/处理方式
 
 ## 断点恢复
 
@@ -131,6 +145,7 @@ archive 阶段可能通过两种方式进入：
 | `apply-done` | `.close-verification-done` 存在（与 checkpoint 不一致，以文件为准） | 检查归档目录是否存在，存在则 Step 4，不存在则 Step 3 |
 | `archived` | 归档目录存在但分支未处理 | Step 4（分支收尾） |
 | `archived` | 归档目录不存在（归档中断） | Step 3（重做归档） |
+| `archived` | 归档目录存在且根目录有 `.hyperspec-brainstorm.md` | Step 4（归档 brainstorm 摘要并清理） |
 | `archived` | 归档目录存在且分支已处理 | 展示变更摘要（同 Step 4 总结报告），然后清理状态文件完成 |
 
 **异常状态检测：**

@@ -141,7 +141,7 @@ HyperSpec 将一次完整的开发周期分为一个可选前置阶段和三个�
 
 | 阶段 | 产出 |
 |------|------|
-| brainstorm | `.hyperspec-brainstorm.md` 收敛摘要 |
+| brainstorm | `.hyperspec-brainstorm.md` 收敛摘要，archive 后移动为归档目录的 `brainstorm.md` |
 | propose | `proposal.md` / `design.md` / `specs/` / `tasks.md` + `superpowers/plans/` 下的实现计划 |
 | apply | 可执行代码 / 编译通过 / 审查通过 |
 | archive | 归档记录 / specs 合并到主规格库 |
@@ -220,7 +220,8 @@ HyperSpec 根据多因子分析选择最优执行模式：
 1. **规格一致性验证** — 逐项检查 design/specs/tasks 是否在代码中体现，生成验证清单
 2. **处理不一致** — 改代码或改规格，重新验证直到通过
 3. **调用 openspec-archive-change** — 通过 CLI 归档变更（含 artifact 完成、task 完成检查）
-4. **分支收尾 + 总结** — 提交剩余文件，展示变更摘要
+4. **归档 brainstorm 摘要** — 将根目录 `.hyperspec-brainstorm.md` 移动到归档目录的 `brainstorm.md`（如存在）
+5. **分支收尾 + 总结** — 提交剩余文件，展示变更摘要
 
 ## 状态管理与断点恢复
 
@@ -299,7 +300,7 @@ HyperSpec 首次运行时自动探测项目特征：
 ```
 项目根目录/
 ├── .hyperspec-state.yaml           # 运行期间存在，完成后删除
-├── .hyperspec-brainstorm.md        # 可选，需求澄清和方案收敛摘要
+├── .hyperspec-brainstorm.md        # 运行期间可选存在，archive 后移动到归档目录
 ├── openspec/
 │   ├── specs/                      # 主规格库（archive阶段合并）
 │   │   └── user-auth/
@@ -309,6 +310,7 @@ HyperSpec 首次运行时自动探测项目特征：
 │           └── 2026-05-14-add-user-auth/
 │               ├── .openspec.yaml
 │               ├── proposal.md
+│               ├── brainstorm.md
 │               ├── design.md
 │               ├── tasks.md
 │               └── specs/
