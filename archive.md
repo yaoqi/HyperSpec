@@ -11,7 +11,7 @@
 - `superpowers/plans/` 下的计划文件所有步骤已勾选
 - 测试全部通过（或 test_command 为 null）
 - 代码审查无 Critical 问题
-- `.hyperspec-state.yaml` 的 checkpoint 为 `apply-done`、`consistency-verified`、`archived` 或 `done` 之一
+- `.hyperspec-state.yaml` 中 `changes.<active_change>.checkpoint`（或旧格式顶层 `checkpoint`）为 `apply-done`、`consistency-verified`、`archived` 或 `done` 之一
 
 如果前置条件不满足，提示：「apply 阶段尚未完成，请先运行 /hyperspec」
 
@@ -34,7 +34,7 @@
 
 **持久化验证状态**：验证完成后，在 `openspec/changes/<变更名>/` 下创建 `.close-verification-done` 文件（内容为验证结果清单），用于断点恢复时判断是否需要重跑验证。
 
-完成后更新 `.hyperspec-state.yaml`：`checkpoint: consistency-verified`。
+完成后更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: consistency-verified`。如当前变更仍是默认变更，可同步顶层 `checkpoint`。
 
 ### 2. 处理不一致
 
@@ -43,7 +43,7 @@
 **选项 A：改代码**
 - 标记哪些代码需要修改
 - 询问用户是否在本阶段直接修复（简单修复）或回到 apply 阶段（复杂修复）
-- 如果用户选择回到 apply 阶段：更新 `.hyperspec-state.yaml` 为 `phase: apply, checkpoint: reviewed`，然后结束 archive 阶段
+- 如果用户选择回到 apply 阶段：更新 `.hyperspec-state.yaml` 为 `changes.<active_change>.phase: apply`、`changes.<active_change>.checkpoint: reviewed`，然后结束 archive 阶段
 
 **选项 B：改规格**
 - 标记哪些规格文档需要更新
@@ -52,7 +52,7 @@
 
 **无论选择哪种修复方式，修复完成后必须：**
 1. 删除 `.close-verification-done` 文件（使验证状态失效）
-2. 更新 `.hyperspec-state.yaml`：`checkpoint: apply-done`（回退到验证前）
+2. 更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: apply-done`（回退到验证前）
 3. 重新执行 Step 1 验证
 4. 重新生成 `.close-verification-done`
 
@@ -82,7 +82,7 @@
 3. 将 `openspec/changes/<变更名>` 移动到 `openspec/changes/archive/<YYYY-MM-DD>-<变更名>`。在 Codex/Windows 中优先使用 PowerShell `Move-Item -LiteralPath ...`，移动前验证源路径和目标路径都位于项目根目录内。
 4. 确认归档成功：活跃变更目录已移除，archive 目录已创建
 
-完成后更新 `.hyperspec-state.yaml`：`checkpoint: archived`。
+完成后更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: archived`。如当前变更仍是默认变更，可同步顶层 `checkpoint`。
 
 ### 4. 分支收尾 + 总结
 
@@ -118,7 +118,13 @@ openspec/changes/archive/<YYYY-MM-DD>-<变更名>/brainstorm.md
 - 不将 `.hyperspec-brainstorm.md` 长期留在项目根目录，避免下次变更误用过期摘要
 
 **清理状态文件：**
-更新 `.hyperspec-state.yaml`：`checkpoint: done`。如果用户接受 HyperSpec 自动 commit 纪律，使用 `git rm .hyperspec-state.yaml` 将其从 git 追踪中移除；如果 `.hyperspec-brainstorm.md` 已移动到归档目录，也将该移动纳入同一个收尾 commit（message: `chore: hyperspec <变更名> 完成`）。如果用户未确认自动 commit，则停在可提交状态并报告需要提交的文件。
+更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: done`，然后清理当前变更分区：
+
+1. 删除 `changes.<active_change>`。
+2. 如果 `changes` 中还有其他活跃变更，保留 `.hyperspec-state.yaml`，并将 `active_change` 切换到剩余变更之一，或设为 `null` 让下一次运行显式指定 `--change`。
+3. 如果 `changes` 已为空，且没有需要保留的运行态信息，删除 `.hyperspec-state.yaml`。
+
+如果用户接受 HyperSpec 自动 commit 纪律，将状态文件的删除或修改纳入同一个收尾 commit；如果 `.hyperspec-brainstorm.md` 已移动到归档目录，也将该移动纳入同一个收尾 commit（message: `chore: hyperspec <变更名> 完成`）。如果用户未确认自动 commit，则停在可提交状态并报告需要提交的文件。
 
 ## 出口条件
 
@@ -126,7 +132,7 @@ openspec/changes/archive/<YYYY-MM-DD>-<变更名>/brainstorm.md
 - 变更已归档（由 openspec-archive-change 完成）
 - 如使用了 worktree：用户已选择分支处理方式且 worktree 已处理
 - 如未使用 worktree：代码已提交或用户已确认稍后处理
-- `.hyperspec-state.yaml` 已删除
+- 当前变更的 `changes.<active_change>` 状态分区已清理；若无其他活跃变更，`.hyperspec-state.yaml` 已删除
 - 如存在 `.hyperspec-brainstorm.md`：已移动到归档目录的 `brainstorm.md`，或用户确认保留/处理方式
 
 ## 断点恢复
@@ -135,7 +141,7 @@ archive 阶段可能通过两种方式进入：
 1. apply 阶段完成后自动进入（正常路径）
 2. 用户显式指定「归档收尾」进入（用户意图覆盖）
 
-重新运行时，读取 `.hyperspec-state.yaml` 的 checkpoint 并验证：
+重新运行时，读取 `.hyperspec-state.yaml` 中 `changes.<active_change>.checkpoint`；没有对应分区时，才回退到顶层 `checkpoint`。随后验证：
 
 | checkpoint | 实际状态验证 | 恢复到 |
 |-----------|-------------|--------|
@@ -146,7 +152,7 @@ archive 阶段可能通过两种方式进入：
 | `archived` | 归档目录存在但分支未处理 | Step 4（分支收尾） |
 | `archived` | 归档目录不存在（归档中断） | Step 3（重做归档） |
 | `archived` | 归档目录存在且根目录有 `.hyperspec-brainstorm.md` | Step 4（归档 brainstorm 摘要并清理） |
-| `archived` | 归档目录存在且分支已处理 | 展示变更摘要（同 Step 4 总结报告），然后清理状态文件完成 |
+| `archived` | 归档目录存在且分支已处理 | 展示变更摘要（同 Step 4 总结报告），然后清理当前变更状态分区完成 |
 
 **异常状态检测：**
 - 活跃变更目录已删除但 archive 目录不存在 → 归档过程中断，提示用户可尝试 `openspec list --json` 检查状态

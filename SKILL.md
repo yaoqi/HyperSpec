@@ -65,18 +65,20 @@ HyperSpec **不做**：
 
 ## 项目分析器（Project Profiler）
 
-前提检查通过后，**在首次运行或状态文件不存在时**，自动扫描项目生成 project_profile。Codex 运行时优先使用 `scripts/profiler.py` 完成扫描，结果保存到 `.hyperspec-state.yaml` 的 `project_profile` 字段。
+前提检查通过后，**在首次运行或状态文件不存在时**，自动扫描项目生成 project_profile。Codex 运行时优先使用 `scripts/profiler.py` 完成扫描，结果保存到 `.hyperspec-state.yaml` 的 `project_profile` 字段；如果已知当前变更名，可加 `--active-change <变更名>` 一并初始化该变更的状态分区。
 
 推荐命令：
 
 ```bash
 python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state
+python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state --active-change <变更名>
 ```
 
 如果用户允许验证编译环境，再运行：
 
 ```bash
 python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state --verify-compile
+python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state --verify-compile --active-change <变更名>
 ```
 
 ### 检测逻辑
@@ -221,7 +223,7 @@ python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --change
 - 如果 checkpoint 声称 `task-N-complete`：计划文件中对应的 checkbox 是否确实已勾选？ → 未勾选则回退到上一个确认一致的 checkpoint
 
 **phase = archive 时验证：**
-- 所有计划 checkbox 是否已勾选？ → 未全勾选则修正状态文件为 `phase: apply, checkpoint: reviewed`，路由到 apply
+- 所有计划 checkbox 是否已勾选？ → 未全勾选则修正状态文件为 `changes.<active_change>.phase: apply`、`changes.<active_change>.checkpoint: reviewed`，路由到 apply
 - 如果 checkpoint ≥ `consistency-verified`：`openspec/changes/archive/` 下是否有对应目录？ → 无则回退到 `consistency-verified`（重做归档）
 - 如果 checkpoint ≥ `archived`：`openspec/changes/archive/` 下是否有对应目录？ → 无则回退到 `consistency-verified`（归档中断）
 - **注意**：`.close-verification-done` 的存在性由 archive.md 内部处理（断点恢复表），SKILL.md 不据此覆盖 checkpoint，避免基于过期文件做错误路由

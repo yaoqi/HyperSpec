@@ -24,7 +24,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 4. **判断项目结构**：单模块 vs 多模块/monorepo
 5. **检测 CI 配置**：是否有 `.github/workflows/`、`.gitlab-ci.yml`、`Jenkinsfile` 等
 
-分析完成后将 `project_profile` 写入 `.hyperspec-state.yaml`，并更新 `phase: propose`、`checkpoint: profiler-done`。如果脚本不可用，再按下方检测规则手动完成同等分析。
+分析完成后将 `project_profile` 写入 `.hyperspec-state.yaml`。此时若尚未确定变更名，只更新顶层 `phase: propose`、`checkpoint: profiler-done`；若已经确定变更名，必须同时写入 `active_change: <变更名>` 并初始化 `changes.<变更名>: { phase: propose, checkpoint: profiler-done }`。如果脚本不可用，再按下方检测规则手动完成同等分析。
 
 **命令运行时验证**：推导出 compile_command 后，必须实际运行一次验证其可用性。具体规则见 SKILL.md "命令运行时验证"段落。如果验证失败且为环境问题，立即阻塞并报告，等待用户提供正确的命令后再继续。
 
@@ -50,7 +50,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 **自主模式：**
 如果用户声明了自主执行意图（如「完全自主」「你决定」「不用确认」），跳过交互式需求确认，直接根据用户最初的需求描述进入 Step 3。空白项目自主模式下根据需求描述推断技术栈。
 
-需求确认完成后，更新 `.hyperspec-state.yaml`：`active_change: <变更名>`、`checkpoint: requirements-confirmed`。
+需求确认完成后，必须更新 `.hyperspec-state.yaml`：设置 `active_change: <变更名>`，并写入 `changes.<变更名>.phase: propose`、`changes.<变更名>.checkpoint: requirements-confirmed`。可同步顶层 `phase/checkpoint` 作为默认变更缓存，但不要只更新顶层字段。
 
 ### 3. 调用 openspec-propose 生成规格文档
 
@@ -79,7 +79,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 4. 按照指令内容，使用 Write 工具直接创建对应的 artifact 文件（proposal.md、design.md、specs/ 下的 .md 文件、tasks.md）
 5. 确保每个 artifact 文件非空且内容完整
 
-完成后更新 `.hyperspec-state.yaml`：`checkpoint: openspec-generated`。
+完成后更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: openspec-generated`。如当前变更仍是默认变更，可同步顶层 `checkpoint`。
 
 ### 4. 调用 writing-plans 生成实现计划
 
@@ -130,7 +130,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
    - **无效代码检查**：检查代码块中是否有调试残留、空行占位、无意义的方法调用（如 `.getClass()` 仅用于触发泛型推断）
    - **类型一致性**：计划中后出现的 Task 引用的类型、方法签名是否与前面 Task 定义的一致
    - 如果发现问题，直接在计划文件中修复，修复后重新确认编译依赖
-10. **立即更新 checkpoint**：writing-plans 完成且 Step 7-9 验证通过后，**立即**更新 `.hyperspec-state.yaml`：`checkpoint: plan-generated`。这一步**不可跳过**，即使用户声明自主模式也必须先写 `plan-generated`，再在 Step 5 中更新为 `plan-generated-and-confirmed`。确保每个 checkpoint 都是原子性推进，避免中断时状态文件与实际文件不一致。
+10. **立即更新 checkpoint**：writing-plans 完成且 Step 7-9 验证通过后，**立即**更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: plan-generated`。这一步**不可跳过**，即使用户声明自主模式也必须先写 `plan-generated`，再在 Step 5 中更新为 `plan-generated-and-confirmed`。确保每个 checkpoint 都是原子性推进，避免中断时状态文件与实际文件不一致。可同步顶层 `checkpoint` 作为默认变更缓存，但不要只更新顶层字段。
 
 ### 5. 用户确认
 
@@ -149,11 +149,11 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 - 计划文件中至少有 1 个 checkbox
 - 用户明确确认可以进入构建阶段，或用户已声明自主执行模式
 
-出口时更新 `.hyperspec-state.yaml`：`phase: apply`、`checkpoint: plan-generated-and-confirmed`。
+出口时更新 `.hyperspec-state.yaml`：`changes.<active_change>.phase: apply`、`changes.<active_change>.checkpoint: plan-generated-and-confirmed`。如当前变更仍是默认变更，可同步顶层 `phase/checkpoint`。
 
 ## 断点恢复
 
-重新运行时，先读取 `.hyperspec-state.yaml` 的 checkpoint，然后检查实际文件状态：
+重新运行时，先读取 `.hyperspec-state.yaml` 中 `changes.<active_change>.checkpoint`；没有对应分区时，才回退到顶层 `checkpoint`。随后检查实际文件状态：
 
 | checkpoint | 实际文件状态 | 恢复到 |
 |-----------|-------------|--------|
@@ -165,7 +165,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 | `openspec-generated` | artifacts 完整但 `superpowers/plans/` 无计划文件 | Step 4（调用 writing-plans） |
 | `plan-generated` | 计划文件存在但无 checkbox | Step 4（重新调用 writing-plans） |
 | `plan-generated` | 计划文件存在且有 checkbox | Step 5（用户确认） |
-| `plan-generated-and-confirmed` | 计划文件存在且有 checkbox | 出口到 apply 阶段（`phase: apply, checkpoint: plan-generated-and-confirmed`） |
+| `plan-generated-and-confirmed` | 计划文件存在且有 checkbox | 出口到 apply 阶段（`changes.<active_change>.phase: apply, checkpoint: plan-generated-and-confirmed`） |
 | `plan-generated-and-confirmed` | 计划文件不存在或无 checkbox | 回退到 Step 4（重新生成计划） |
 
 **状态文件缺失时的降级**：如果没有 `.hyperspec-state.yaml`，回退到文件扫描方式（按上述表格右列的实际文件状态判断）。

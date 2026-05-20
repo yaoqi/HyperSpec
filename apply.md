@@ -51,7 +51,7 @@
 
 **断点检测（阶段流程入口）：**
 
-从 `.hyperspec-state.yaml` 读取 checkpoint，然后验证实际状态：
+从 `.hyperspec-state.yaml` 读取 `changes.<active_change>.checkpoint`；没有对应分区时，才回退到旧格式顶层 `checkpoint`。然后验证实际状态：
 
 | checkpoint | 实际状态验证 | 路由到 |
 |-----------|-------------|--------|
@@ -71,7 +71,7 @@
 - 使用 `superpowers/plans/` 下的计划文件作为输入
 - 每个任务派发给独立的实现者子代理
 - 每个任务完成后派发审查者子代理做独立审查
-- **子代理只负责写代码和 commit**，**主会话负责进度跟踪**：每个子代理返回后，主会话用 Edit 工具将计划文件中该 Task 的所有 `- [ ]` 改为 `- [x]`，并更新 `.hyperspec-state.yaml` 的 checkpoint 为 `task-N-complete`
+- **子代理只负责写代码和 commit**，**主会话负责进度跟踪**：每个子代理返回后，主会话用 Edit 工具将计划文件中该 Task 的所有 `- [ ]` 改为 `- [x]`，并更新 `.hyperspec-state.yaml` 的 `changes.<active_change>.checkpoint` 为 `task-N-complete`
 - 如果跳过了 worktree：subagent-driven-development 中 `using-git-worktrees` 的 REQUIRED 可忽略
 
 **Codex 注意：** 只有用户明确要求或允许子代理/并行工作时才使用完整模式。否则即使命中完整模式条件，也降级为轻量模式，并在总结中说明原因。当前 Codex 会话没有 `superpowers:subagent-driven-development` 时，同样降级为轻量模式。
@@ -88,7 +88,7 @@
 
 1. **编译检查**：运行 `compile_command`，编译必须通过（如果 compile_command 为 null 则跳过）
 2. **更新 checkbox**：用 `apply_patch` 将计划文件中**该 Task 下的所有** `- [ ]` 改为 `- [x]`（包括 Verify、Commit 等非实现步骤，不能遗漏）
-3. **更新状态文件**：更新 `.hyperspec-state.yaml` 的 `checkpoint: task-N-complete`
+3. **更新状态文件**：更新 `.hyperspec-state.yaml` 的 `changes.<active_change>.checkpoint: task-N-complete`。如当前变更仍是默认变更，可同步顶层 `checkpoint`，但不要只更新顶层字段。
 4. **自动 commit**：将代码改动 + 计划文件变更 + 状态文件变更一起提交到本地仓库
    - commit message 格式：`<类型>(<范围>): <task描述>`
    - 一个 task 对应一个 commit（包含计划文件和状态文件更新）
@@ -103,7 +103,7 @@
 - 运行 `test_command`（来自 project_profile），如果 test_command 为 null 则跳过自动化测试
 - 确认结果符合预期
 
-验证通过后更新 `.hyperspec-state.yaml`：`checkpoint: verified`。
+验证通过后更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: verified`。如当前变更仍是默认变更，可同步顶层 `checkpoint`。
 
 ### 3. 全局审查
 
@@ -117,7 +117,7 @@
 
 **重试上限**：如果全局审查循环超过 3 次仍有 Critical 问题，提示用户：「审查反复不通过，可能需要回到 propose 阶段重新审视设计方案。」让用户决定是否继续。
 
-审查通过后更新 `.hyperspec-state.yaml`：`checkpoint: reviewed`。
+审查通过后更新 `.hyperspec-state.yaml`：`changes.<active_change>.checkpoint: reviewed`。如当前变更仍是默认变更，可同步顶层 `checkpoint`。
 
 ### 4. 最终确认
 
@@ -126,7 +126,7 @@ Step 2 验证通过 + Step 3 审查通过后：
 1. **同步 tasks.md 状态**：将 `openspec/changes/<变更名>/tasks.md` 中所有任务的完成状态标记为已完成（与 superpowers plan 的 checkbox 状态对齐）
 2. 向用户展示变更摘要（改动文件列表、commit 列表、验证结果、审查结论）
 
-此步骤是 apply 阶段的最终出口，完成后更新 `.hyperspec-state.yaml`：`phase: archive`、`checkpoint: apply-done`，然后自动进入 archive 阶段。
+此步骤是 apply 阶段的最终出口，完成后更新 `.hyperspec-state.yaml`：`changes.<active_change>.phase: archive`、`changes.<active_change>.checkpoint: apply-done`。如当前变更仍是默认变更，可同步顶层 `phase/checkpoint`，然后自动进入 archive 阶段。
 
 ## 出口条件
 

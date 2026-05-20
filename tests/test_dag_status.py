@@ -104,6 +104,28 @@ class DagStatusTests(unittest.TestCase):
         self.assertEqual(self.node(payload, "cleanup")["status"], "done")
         self.assertTrue(payload["isComplete"])
 
+    def test_archive_cleanup_allows_other_change_state_to_remain(self) -> None:
+        with self.temp_project("archive-cleanup-with-other-state") as root:
+            archive = root / "openspec" / "changes" / "archive" / "2026-05-20-add-login"
+            write(archive / "proposal.md")
+            write(
+                root / ".hyperspec-state.yaml",
+                "\n".join(
+                    [
+                        "version: 1",
+                        "active_change: add-billing",
+                        "changes:",
+                        "  add-billing:",
+                        "    phase: apply",
+                        "    checkpoint: reviewed",
+                    ]
+                ),
+            )
+            payload = self.run_status(root, "--change", "add-login")
+
+        self.assertFalse(payload["changeScoped"])
+        self.assertEqual(self.node(payload, "cleanup")["status"], "done")
+
     def test_change_scoped_state_overrides_top_level_checkpoint(self) -> None:
         with self.temp_project("change-scoped-state") as root:
             write(

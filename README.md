@@ -339,7 +339,7 @@ HyperSpec 首次运行时自动探测项目特征：
 
 ```
 项目根目录/
-├── .hyperspec-state.yaml           # 运行期间存在，完成后删除
+├── .hyperspec-state.yaml           # 运行期间存在；多变更时保留，单变更/无剩余变更时删除
 ├── .hyperspec-brainstorm.md        # 运行期间可选存在，archive 后移动到归档目录
 ├── openspec/
 │   ├── specs/                      # 主规格库（archive阶段合并）
@@ -415,6 +415,8 @@ project_profile:
 `changes` 是多变更并行时的状态隔离层。`dag_status.py --change add-billing` 会使用 `changes.add-billing.phase/checkpoint`，并在输出中返回 `"changeScoped": true`；没有对应分区时才回退到顶层 `phase/checkpoint`。
 
 核心原则：**DAG 计算结果是主路由，状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以 `dag_status.py` 基于文件系统得出的结果为准。
+
+完整的文件职责、状态读写对照表和多变更清理规则见 [references/dag.md](references/dag.md)。
 
 用以下命令查看当前 DAG 节点：
 
@@ -628,7 +630,7 @@ done
   → checkpoint=archived
   → 移动 .hyperspec-brainstorm.md 到归档目录 brainstorm.md（如果存在）
   → checkpoint=done
-  → 删除 .hyperspec-state.yaml
+  → 清理当前 change 分区；若无其他活跃变更，再删除 .hyperspec-state.yaml
 ```
 
 brainstorm 摘要生命周期：
@@ -647,7 +649,7 @@ brainstorm 摘要生命周期：
 - `consistency-verified` 且归档目录不存在：执行归档
 - `archived` 但根目录还有 `.hyperspec-brainstorm.md`：继续 Step 4，移动摘要并清理
 - `archived` 但归档目录不存在：归档中断，重做归档
-- `done`：状态完成，应删除 `.hyperspec-state.yaml`
+- `done`：当前变更已完成；若没有其他活跃变更，应删除 `.hyperspec-state.yaml`，否则只清理当前变更分区
 
 ### 无状态文件时的降级扫描
 

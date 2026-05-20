@@ -89,12 +89,14 @@ def parse_state(root: Path) -> dict[str, Any]:
 def state_for_change(state: dict[str, Any], change: str | None) -> dict[str, Any]:
     scoped = dict(state)
     scoped["changeScoped"] = False
+    scoped["changeStatePresent"] = False
     if not change:
         return scoped
     change_state = state.get("changes", {}).get(change)
     if isinstance(change_state, dict):
         scoped.update({key: value for key, value in change_state.items() if key in {"phase", "checkpoint"}})
         scoped["changeScoped"] = True
+        scoped["changeStatePresent"] = True
     return scoped
 
 
@@ -247,7 +249,12 @@ def build_nodes(root: Path, dag: dict[str, Any], state: dict[str, Any], change: 
         "review": bool(checkpoint_at_least(state, "reviewed") or archive_dir),
         "consistency": bool((change_dir and nonempty_file(change_dir / ".close-verification-done")) or checkpoint_at_least(state, "consistency-verified") or archive_dir),
         "archive": archive_done,
-        "cleanup": archive_done and (not (root / ".hyperspec-state.yaml").exists()) and (not brainstorm_path.exists()),
+        "cleanup": archive_done
+        and (not brainstorm_path.exists())
+        and (
+            not (root / ".hyperspec-state.yaml").exists()
+            or bool(change and not state.get("changeStatePresent"))
+        ),
     }
 
     nodes: list[dict[str, Any]] = []
