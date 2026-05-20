@@ -162,7 +162,7 @@ project_profile:
 
 ## 状态检测
 
-检查 `.hyperspec-state.yaml` 和实际文件状态，确定应该进入哪个阶段：
+优先检查 DAG，再在必要时降级到手写规则。
 
 **Codex 优先做法：**
 
@@ -170,18 +170,22 @@ project_profile:
 python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录>
 ```
 
-脚本输出 `nodes`、`next`、`missingDeps` 和文件证据。路由时优先选择 `next` 中的第一个节点；如果状态文件和 DAG 结果冲突，以 DAG 基于文件系统计算出的节点状态为准。需要可视化时运行：
+脚本输出 `nodes`、`next`、`missingDeps` 和文件证据。**路由时优先选择 `next` 中的第一个节点**；如果状态文件和 DAG 结果冲突，以 DAG 基于文件系统计算出的节点状态为准。需要可视化时运行：
 
 ```bash
 python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --format mermaid
 ```
 
-### Step 1：读取状态文件
+### Step 1：按 DAG 路由
 
-- 状态文件不存在 → 这是首次运行，执行项目分析器，然后根据用户需求清晰度进入 brainstorm 或 propose 阶段
-- 状态文件存在 → 读取 phase 和 checkpoint
+1. 运行 `dag_status.py`
+2. 读取 `next` 数组
+3. 优先进入 `next[0]` 对应节点的阶段文件
+4. 若 `next` 为空，则回退到状态文件与实际文件的手写检测
 
-### Step 2：验证状态文件与实际文件一致性
+### Step 2：读取状态文件与实际文件进行补充校验
+
+当 DAG 输出不足以判定、脚本不可用，或需要恢复旧项目时，才执行下面的降级规则。
 
 根据状态文件中的 phase，验证对应的前提条件：
 
@@ -207,7 +211,7 @@ python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --format
 - 如果 checkpoint ≥ `archived`：`openspec/changes/archive/` 下是否有对应目录？ → 无则回退到 `consistency-verified`（归档中断）
 - **注意**：`.close-verification-done` 的存在性由 archive.md 内部处理（断点恢复表），SKILL.md 不据此覆盖 checkpoint，避免基于过期文件做错误路由
 
-### Step 3：路由
+### Step 3：旧规则路由（降级）
 
 | 状态文件 phase | 验证结果 | 路由到 |
 |---------------|---------|--------|
@@ -237,12 +241,20 @@ python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --format
 
 ## 路由
 
-根据检测结果，用 Read 工具加载对应文件并执行：
+根据 `dag_status.py` 的 `next[0]` 选择阶段文件并执行：
 
-- **brainstorm 阶段** → 读取 skill 目录下的 `brainstorm.md`，按其中流程执行
-- **propose 阶段** → 读取 skill 目录下的 `propose.md`，按其中流程执行
-- **apply 阶段** → 读取 skill 目录下的 `apply.md`，按其中流程执行
-- **archive 阶段** → 读取 skill 目录下的 `archive.md`，按其中流程执行
+| DAG node | 阶段文件 |
+|---------|----------|
+| `project-profile` | `propose.md`（只执行项目分析步骤） |
+| `brainstorm` | `brainstorm.md` |
+| `openspec-artifacts` | `propose.md` |
+| `implementation-plan` | `propose.md` |
+| `implementation` | `apply.md` |
+| `verification` | `apply.md` |
+| `review` | `apply.md` |
+| `consistency` | `archive.md` |
+| `archive` | `archive.md` |
+| `cleanup` | `archive.md` |
 
 加载后严格按照文件中定义的流程、出口条件和硬门执行，不要跳步。
 
