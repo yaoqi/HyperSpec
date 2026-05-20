@@ -345,3 +345,256 @@ apply 阶段的硬门禁止修改规格文档。你可以记录问题继续实�
 ### 支持哪些编程语言和项目类型？
 
 不限制语言和项目类型。HyperSpec 会自动探测项目技术栈并自适应调整编译/测试命令和执行策略。Java/Maven、Java/Gradle、Node.js、Go、Rust、Python 等主流技术栈都有内置支持。
+
+## 状态机逻辑
+
+HyperSpec 运行期间用 `.hyperspec-state.yaml` 记录当前阶段：
+
+```yaml
+version: 1
+active_change: add-user-auth
+phase: brainstorm | propose | apply | archive
+checkpoint: ...
+project_profile:
+  languages: [...]
+  frameworks: [...]
+  build_tool: ...
+  compile_command: ...
+  test_command: ...
+  structure: ...
+  has_ci: ...
+```
+
+核心原则：**状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以实际文件为准并修正状态。
+
+### 阶段总览
+
+```text
+brainstorm（可选） → propose → apply → archive → done
+```
+
+`brainstorm` 是前置可选阶段。需求模糊时进入，需求明确时跳过。
+
+### brainstorm
+
+用途：把模糊想法收敛成规格输入。
+
+关键文件：
+
+```text
+.hyperspec-brainstorm.md
+```
+
+checkpoint：
+
+```text
+profiler-done
+brainstorm-started
+brainstorm-done
+```
+
+状态流：
+
+```text
+无状态文件
+  → 运行 profiler
+  → 如果需求模糊：phase=brainstorm, checkpoint=profiler-done
+  → brainstorm 开始：checkpoint=brainstorm-started
+  → 写入 .hyperspec-brainstorm.md
+  → phase=propose, checkpoint=brainstorm-done
+```
+
+恢复规则：
+
+- `.hyperspec-brainstorm.md` 存在且非空：可进入 propose
+- `brainstorm-done` 但摘要不存在：回退到 `brainstorm-started`
+- 如果已经有 OpenSpec change 或 plan，说明实际进度已越过 brainstorm，路由到 propose/apply
+
+### propose
+
+用途：生成 OpenSpec artifacts 和实现计划。
+
+主要产物：
+
+```text
+openspec/changes/<change>/
+  proposal.md
+  design.md
+  tasks.md
+  specs/
+
+superpowers/plans/<date>-<change>.md
+```
+
+checkpoint：
+
+```text
+brainstorm-done
+requirements-confirmed
+openspec-generated
+plan-generated
+plan-generated-and-confirmed
+```
+
+状态流：
+
+```text
+进入 propose
+  → 需求确认
+  → checkpoint=requirements-confirmed
+  → 调用 openspec-propose
+  → checkpoint=openspec-generated
+  → 调用 writing-plans
+  → checkpoint=plan-generated
+  → 用户确认可以实现
+  → phase=apply, checkpoint=plan-generated-and-confirmed
+```
+
+如果存在 `.hyperspec-brainstorm.md`，propose 必须把其中的推荐方向、非目标、约束、成功标准作为需求输入。
+
+恢复规则：
+
+- `requirements-confirmed` 但 change 目录不存在：回到 openspec-propose
+- `openspec-generated` 但 plan 不存在：回到 writing-plans
+- `plan-generated` 且 plan 有 checkbox：等待用户确认
+- plan 已存在且有绑定注释 `<!-- hyperspec change: <name> -->`：可进入 apply
+- plan 不存在或无 checkbox：回退 propose
+
+### apply
+
+用途：按实现计划写代码、验证、审查。
+
+关键文件：
+
+```text
+superpowers/plans/<date>-<change>.md
+.hyperspec-state.yaml
+openspec/changes/<change>/tasks.md
+```
+
+checkpoint：
+
+```text
+plan-generated-and-confirmed
+task-N-complete
+verified
+reviewed
+apply-done
+```
+
+状态流：
+
+```text
+进入 apply
+  → 从第一个未勾选 task 开始实现
+  → 每个 task 完成：
+      编译检查
+      更新 plan checkbox
+      更新 checkpoint=task-N-complete
+      commit
+  → 全量验证通过
+  → checkpoint=verified
+  → 代码审查通过
+  → checkpoint=reviewed
+  → 同步 tasks.md 完成状态
+  → phase=archive, checkpoint=apply-done
+```
+
+恢复规则：
+
+- `task-N-complete` 但 plan 对应 checkbox 未勾选：状态过期，回退到最近一致 task
+- `verified` 但测试未通过：回到 apply 修复
+- `reviewed` 但仍有 Critical 问题：回到 apply 修复
+- 所有 checkbox 已勾选：进入验证/审查，然后 archive
+
+硬门：apply 阶段禁止修改 `openspec/changes/` 下的规格设计文档。例外是 `tasks.md` 的完成状态可在 apply 末尾同步。
+
+### archive
+
+用途：验证实现和规格一致，归档变更，清理临时状态。
+
+checkpoint：
+
+```text
+apply-done
+consistency-verified
+archived
+done
+```
+
+状态流：
+
+```text
+进入 archive
+  → 规格一致性验证
+  → 写 .close-verification-done
+  → checkpoint=consistency-verified
+  → 调用 openspec-archive-change
+  → change 移动到 openspec/changes/archive/<date>-<change>
+  → checkpoint=archived
+  → 移动 .hyperspec-brainstorm.md 到归档目录 brainstorm.md（如果存在）
+  → checkpoint=done
+  → 删除 .hyperspec-state.yaml
+```
+
+brainstorm 摘要生命周期：
+
+```text
+.hyperspec-brainstorm.md
+  → propose/apply/archive 期间保留在根目录
+  → archive 成功后移动到：
+     openspec/changes/archive/<date>-<change>/brainstorm.md
+  → 根目录不长期保留，避免下次误用
+```
+
+恢复规则：
+
+- `apply-done` 且 `.close-verification-done` 不存在：重跑一致性验证
+- `consistency-verified` 且归档目录不存在：执行归档
+- `archived` 但根目录还有 `.hyperspec-brainstorm.md`：继续 Step 4，移动摘要并清理
+- `archived` 但归档目录不存在：归档中断，重做归档
+- `done`：状态完成，应删除 `.hyperspec-state.yaml`
+
+### 无状态文件时的降级扫描
+
+如果 `.hyperspec-state.yaml` 不存在：
+
+```text
+1. 有 .hyperspec-brainstorm.md 且无活跃变更
+   → propose
+
+2. 有 openspec/changes/<active-change>
+   → 检查是否有 plan
+
+3. 有多个 active change
+   → 让用户选择
+
+4. 有 plan 且有 checkbox
+   → 根据 checkbox 进入 apply
+
+5. plan 全部勾选
+   → apply 的验证/审查，然后 archive
+
+6. 无 active change
+   → 根据需求清晰度进入 brainstorm 或 propose
+```
+
+一句话模型：
+
+```text
+需求是否清晰？
+  不清晰 → brainstorm → 收敛摘要
+  清晰 → propose
+
+propose 生成规格和计划
+apply 消费计划并实现
+archive 验证一致性、归档规格、移动 brainstorm 摘要、清理状态
+```
+
+核心安全原则：
+
+```text
+文件系统事实 > .hyperspec-state.yaml
+checkpoint 只能前进到已经被实际文件证明的状态
+每个阶段只做本阶段允许做的事
+```
