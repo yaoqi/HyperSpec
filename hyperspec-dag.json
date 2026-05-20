@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "description": "HyperSpec workflow DAG. Nodes are evaluated from filesystem evidence; .hyperspec-state.yaml is only a cache.",
+  "nodes": [
+    {
+      "id": "project-profile",
+      "phase": "propose",
+      "checkpoint": "profiler-done",
+      "deps": [],
+      "outputs": [".hyperspec-state.yaml"],
+      "description": "Detect project language, framework, build tool, test command, structure, and CI."
+    },
+    {
+      "id": "brainstorm",
+      "phase": "brainstorm",
+      "checkpoint": "brainstorm-done",
+      "deps": ["project-profile"],
+      "optional": true,
+      "outputs": [".hyperspec-brainstorm.md"],
+      "description": "Converge fuzzy requirements into a usable specification input."
+    },
+    {
+      "id": "openspec-artifacts",
+      "phase": "propose",
+      "checkpoint": "openspec-generated",
+      "deps": ["project-profile"],
+      "optionalDeps": ["brainstorm"],
+      "outputs": [
+        "openspec/changes/<change>/proposal.md",
+        "openspec/changes/<change>/design.md",
+        "openspec/changes/<change>/tasks.md",
+        "openspec/changes/<change>/specs/"
+      ],
+      "description": "Create the OpenSpec change artifacts."
+    },
+    {
+      "id": "implementation-plan",
+      "phase": "propose",
+      "checkpoint": "plan-generated",
+      "deps": ["openspec-artifacts"],
+      "outputs": ["superpowers/plans/*<change>*.md"],
+      "description": "Create a Superpowers implementation plan bound to the active change."
+    },
+    {
+      "id": "implementation",
+      "phase": "apply",
+      "checkpoint": "task-N-complete",
+      "deps": ["implementation-plan"],
+      "outputs": ["checked plan boxes"],
+      "description": "Implement every task in the implementation plan."
+    },
+    {
+      "id": "verification",
+      "phase": "apply",
+      "checkpoint": "verified",
+      "deps": ["implementation"],
+      "outputs": [".hyperspec-state.yaml checkpoint=verified"],
+      "description": "Run full verification after all implementation tasks are complete."
+    },
+    {
+      "id": "review",
+      "phase": "apply",
+      "checkpoint": "reviewed",
+      "deps": ["verification"],
+      "outputs": [".hyperspec-state.yaml checkpoint=reviewed"],
+      "description": "Complete code review with no Critical issues."
+    },
+    {
+      "id": "consistency",
+      "phase": "archive",
+      "checkpoint": "consistency-verified",
+      "deps": ["review"],
+      "outputs": ["openspec/changes/<change>/.close-verification-done"],
+      "description": "Verify implementation and OpenSpec artifacts agree."
+    },
+    {
+      "id": "archive",
+      "phase": "archive",
+      "checkpoint": "archived",
+      "deps": ["consistency"],
+      "outputs": ["openspec/changes/archive/<date>-<change>/"],
+      "description": "Archive the active OpenSpec change."
+    },
+    {
+      "id": "cleanup",
+      "phase": "archive",
+      "checkpoint": "done",
+      "deps": ["archive"],
+      "outputs": [
+        "openspec/changes/archive/<date>-<change>/brainstorm.md",
+        ".hyperspec-state.yaml removed"
+      ],
+      "description": "Archive brainstorm summary if present and remove transient state."
+    }
+  ]
+}

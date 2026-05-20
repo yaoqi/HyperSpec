@@ -72,6 +72,15 @@ python scripts/profiler.py --root /path/to/project --write-state --verify-compil
 
 默认只输出 JSON，不修改项目。加 `--write-state` 后会在目标项目根目录生成 `.hyperspec-state.yaml`。加 `--verify-compile` 后会实际运行推导出的编译命令；如果该命令需要下载依赖或访问网络，Codex 需要先获得用户授权。
 
+也提供一个 OpenSpec 风格的 DAG 状态计算脚本：
+
+```bash
+python scripts/dag_status.py --root /path/to/project
+python scripts/dag_status.py --root /path/to/project --format mermaid
+```
+
+`dag_status.py` 读取 `hyperspec-dag.json` 和实际文件状态，输出 `nodes`、`next`、`missingDeps`、`isComplete` 等字段。它把 `.hyperspec-state.yaml` 当作缓存，优先用文件证据计算当前 DAG 节点状态。
+
 ## 使用方式
 
 在 Claude Code / Cursor / Codex 对话中输入：
@@ -366,6 +375,48 @@ project_profile:
 ```
 
 核心原则：**状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以实际文件为准并修正状态。
+
+HyperSpec 的状态机也可以通过 `hyperspec-dag.json` 表达为 OpenSpec 风格 DAG。用以下命令查看当前节点：
+
+```bash
+python scripts/dag_status.py --root .
+```
+
+JSON 输出示例：
+
+```json
+{
+  "activeChange": "add-user-auth",
+  "phase": "propose",
+  "checkpoint": "openspec-generated",
+  "isComplete": false,
+  "next": ["implementation-plan"],
+  "nodes": [
+    {
+      "id": "openspec-artifacts",
+      "status": "done",
+      "missingDeps": []
+    },
+    {
+      "id": "implementation-plan",
+      "status": "ready",
+      "missingDeps": []
+    }
+  ]
+}
+```
+
+节点状态含义：
+
+- `done`：该节点的文件证据或 checkpoint 已满足
+- `ready`：依赖已满足，可以执行该节点
+- `blocked`：仍缺少依赖，查看 `missingDeps`
+
+生成 Mermaid 图：
+
+```bash
+python scripts/dag_status.py --root . --format mermaid
+```
 
 ### 阶段总览
 
