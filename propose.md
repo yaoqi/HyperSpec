@@ -2,7 +2,7 @@
 
 ## 目标
 
-把用户的需求从模糊想法变成可执行的任务清单。通过项目感知 + 调用原生 skill 产出完整的规格文档和实现计划。
+把已经收敛的用户需求变成可执行的任务清单。通过项目感知 + 调用原生 skill 产出完整的规格文档和实现计划。如果存在 `.hyperspec-brainstorm.md`，必须把其中的推荐方向、非目标、约束和成功标准作为本阶段的需求输入。
 
 ## 阶段流程
 
@@ -35,6 +35,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 
 与用户交互确认需求。规则：
 
+- 如果 `.hyperspec-brainstorm.md` 存在，先读取它，并把其中的 Problem、Goals、Non-goals、Constraints、Recommended Direction、Success Criteria 作为确认基线
 - 一次只问一个问题
 - 优先使用选择题
 - 关注：目的、约束、成功标准
@@ -62,7 +63,7 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
    ```
    Change name: <变更名>. Description: [项目: {project_profile.languages} + {project_profile.frameworks}, 构建: {project_profile.build_tool}] <需求描述>
    ```
-   将 project_profile 信息作为上下文前缀附加到描述中，让 openspec-propose 能生成贴合项目技术栈的规格文档。
+   将 project_profile 信息作为上下文前缀附加到描述中；如果存在 `.hyperspec-brainstorm.md`，在需求描述中追加其收敛摘要，让 openspec-propose 能同时看到推荐方向、非目标、约束和成功标准。
 3. `openspec-propose` 会自动执行：
    - `openspec new change "<name>"` — 创建变更目录
    - `openspec status --change "<name>" --json` — 获取 artifact build order
@@ -156,6 +157,8 @@ python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-st
 
 | checkpoint | 实际文件状态 | 恢复到 |
 |-----------|-------------|--------|
+| `brainstorm-done` | `.hyperspec-brainstorm.md` 存在且无活跃变更目录 | Step 2（基于 brainstorm 摘要做需求确认） |
+| `brainstorm-done` | `.hyperspec-brainstorm.md` 不存在或为空 | 回到 brainstorm 阶段 |
 | `profiler-done` | 无活跃变更目录 | Step 2（需求确认） |
 | `requirements-confirmed` | 变更目录不存在 | Step 3（调用 openspec-propose） |
 | `requirements-confirmed` | 变更目录存在但 artifacts 不完整或有空文件 | Step 3（openspec-propose 会自动补充） |

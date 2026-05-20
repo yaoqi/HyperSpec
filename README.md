@@ -1,12 +1,13 @@
 # HyperSpec
 
-规格驱动 + 工程纪律的完整开发工作流 Skill，协调 [OpenSpec](https://github.com/fission-ai/openspec)（规格管理）和 [Superpowers](https://github.com/obra/superpowers)（TDD + 子代理审查），从需求到实现到归档一条流程走完。
+规格驱动 + 工程纪律的完整开发工作流 Skill，协调 [OpenSpec](https://github.com/fission-ai/openspec)（规格管理）和 [Superpowers](https://github.com/obra/superpowers)（brainstorming + TDD + 子代理审查），从想法澄清到规格、实现、归档一条流程走完。
 
 OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得对不对」。HyperSpec 是**纯编排层**，只做项目感知、状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能。
 
 ## 核心价值
 
 - **项目感知**：自动探测语言/框架/构建工具，自适应生成规格和执行策略
+- **头脑风暴前置**：需求模糊时先发散和收敛，再进入规格阶段
 - **需求先行**：强制先产出规格文档再写代码，避免 AI 闷头实现方向跑偏
 - **纯编排层**：不重写 OpenSpec/Superpowers 功能，只做调用和衔接
 - **断点恢复**：结构化状态文件 + 实际文件双重验证，任何中断点可精确恢复
@@ -49,7 +50,7 @@ cp -r hyperspec ~/.codex/skills/hyperspec
 
 ## Codex 适配
 
-HyperSpec 在 Codex 中按同一套三阶段流程运行，但执行动作需要映射到 Codex 的本地工具：
+HyperSpec 在 Codex 中按同一套“头脑风暴前置 + 三阶段交付”流程运行，但执行动作需要映射到 Codex 的本地工具：
 
 | 原文动作 | Codex 中的做法 |
 |---------|---------------|
@@ -88,6 +89,7 @@ python scripts/profiler.py --root /path/to/project --write-state --verify-compil
 
 skill 会自动检测项目状态，判断应进入哪个阶段。你也可以显式指定阶段：
 
+- `先头脑风暴` → 强制进入 brainstorm 阶段
 - `先做规格` → 强制进入 propose 阶段
 - `直接开始实现` → 跳到 apply 阶段（需已有实现计划）
 - `归档收尾` → 进入 archive 阶段
@@ -111,23 +113,23 @@ HyperSpec **不做**：
 
 ## 工作流概览
 
-HyperSpec 将一次完整的开发周期分为三个阶段，每个阶段委托给原生 skill 执行：
+HyperSpec 将一次完整的开发周期分为一个可选前置阶段和三个交付阶段，每个阶段委托给原生 skill 或 inline 流程执行：
 
 ```
-+==================+     +================+     +================+
-| propose（规格）   | --> | apply（实现）    | --> | archive（归档） |
-| 项目分析          |     | TDD 实现        |     | 一致性验证       |
-| 需求确认          |     | verification   |     | archive-change  |
-| openspec-propose |     | code-review    |     | specs 合并      |
-| writing-plans    |     | 禁止改规格       |     |                |
-| 禁止写代码         |     |                |     |                |
-+==================+     +================+     +================+
++======================+     +==================+     +================+     +================+
+| brainstorm（可选）    | --> | propose（规格）   | --> | apply（实现）    | --> | archive（归档） |
+| 问题澄清              |     | 项目分析          |     | TDD 实现        |     | 一致性验证       |
+| 方案发散              |     | 需求确认          |     | verification   |     | archive-change  |
+| 方向收敛              |     | openspec-propose |     | code-review    |     | specs 合并      |
+| 禁止写规格/代码        |     | writing-plans    |     | 禁止改规格       |     |                |
++======================+     +==================+     +================+     +================+
 ```
 
 **各阶段委托的原生 Skill：**
 
 | 阶段 | 委托 Skill | 职责 |
 |------|-----------|------|
+| brainstorm | `superpowers:brainstorming` 或 inline | 澄清问题空间、目标、非目标、约束、备选方案和推荐方向 |
 | propose | `openspec-propose` | 通过 CLI 创建变更目录 + 生成所有 artifacts |
 | propose | `superpowers:writing-plans` | 读取 openspec artifacts，生成实现计划 |
 | apply | `superpowers:subagent-driven-development` 或 inline | 按计划执行实现 |
@@ -139,11 +141,24 @@ HyperSpec 将一次完整的开发周期分为三个阶段，每个阶段委托�
 
 | 阶段 | 产出 |
 |------|------|
+| brainstorm | `.hyperspec-brainstorm.md` 收敛摘要 |
 | propose | `proposal.md` / `design.md` / `specs/` / `tasks.md` + `superpowers/plans/` 下的实现计划 |
 | apply | 可执行代码 / 编译通过 / 审查通过 |
 | archive | 归档记录 / specs 合并到主规格库 |
 
-## 三阶段详解
+## 阶段详解
+
+### brainstorm 阶段 — 把模糊想法收敛成规格输入
+
+当用户需求还不清晰，或存在多个产品/技术方向时，HyperSpec 会先进入 brainstorm 阶段。此阶段只做问题澄清、方案发散、取舍比较和推荐方向收敛。**本阶段禁止写规格、写代码或创建分支。**
+
+**产出文件：**
+
+| 文件 | 内容 |
+|------|------|
+| `.hyperspec-brainstorm.md` | 原始需求、问题定义、目标、非目标、约束、备选方案、推荐方向、开放问题、成功标准 |
+
+如果用户需求已经明确，或用户说「直接做规格」，此阶段可以跳过。
 
 ### propose 阶段 — 把模糊想法变成可执行任务
 
@@ -236,7 +251,9 @@ project_profile:
 
 | 项目状态 | 进入阶段 |
 |----------|----------|
-| 无状态文件 + 无活跃变更 | propose 阶段（首次运行） |
+| 无状态文件 + 需求模糊 + 无活跃变更 | brainstorm 阶段（首次运行） |
+| 无状态文件 + 需求明确 + 无活跃变更 | propose 阶段（首次运行） |
+| 有 `.hyperspec-brainstorm.md` 但无活跃变更 | propose 阶段（使用 brainstorm 摘要作为输入） |
 | 有活跃变更但无计划文件 | propose 阶段（补生成计划） |
 | 有计划文件但无 checkbox（plan 不完整） | propose 阶段（回到计划生成） |
 | 有计划文件但未开始（无已勾选 checkbox） | apply 阶段（全新执行） |
@@ -246,6 +263,7 @@ project_profile:
 
 ### 各阶段断点恢复
 
+- **brainstorm 阶段：** 通过 checkpoint 和 `.hyperspec-brainstorm.md` 恢复到发散或收敛完成状态
 - **propose 阶段：** 通过 checkpoint 精确恢复到需求确认、openspec 生成、计划生成等具体步骤
 - **apply 阶段：** 通过 checkpoint 精确恢复到具体 task，状态文件和 checkbox 双重验证
 - **archive 阶段：** 通过 checkpoint 恢复到验证、归档、分支收尾等具体步骤
@@ -281,6 +299,7 @@ HyperSpec 首次运行时自动探测项目特征：
 ```
 项目根目录/
 ├── .hyperspec-state.yaml           # 运行期间存在，完成后删除
+├── .hyperspec-brainstorm.md        # 可选，需求澄清和方案收敛摘要
 ├── openspec/
 │   ├── specs/                      # 主规格库（archive阶段合并）
 │   │   └── user-auth/
@@ -303,6 +322,7 @@ HyperSpec 首次运行时自动探测项目特征：
 ## 设计原则
 
 - **纯编排层：** HyperSpec 只做项目感知、状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能
+- **先发散再收敛：** 模糊需求先进入 brainstorm，明确需求可直接进入 propose
 - **规格与实现分离：** propose 阶段只产出文档，apply 阶段只写代码，各自有硬门禁止越界
 - **项目感知自适应：** 根据项目技术栈自动调整编译命令、测试策略、执行模式
 - **每个阶段有明确出口条件：** 不满足出口条件就不能进入下一阶段

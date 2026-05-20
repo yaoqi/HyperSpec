@@ -1,11 +1,11 @@
 ---
 name: hyperspec
-description: 规格驱动+工程纪律的完整开发工作流。协调OpenSpec（规格管理）和Superpowers（TDD+子代理审查），从需求到实现到归档一条流程走完。当用户说「用hyperspec」「规格驱动开发」「完整流程开发功能」时触发。前提：需已安装Superpowers和OpenSpec。
+description: 带头脑风暴前置的规格驱动+工程纪律完整开发工作流。协调OpenSpec（规格管理）和Superpowers（brainstorming、TDD、子代理审查），从想法澄清到规格、实现、归档一条流程走完。当用户说「用hyperspec」「规格驱动开发」「完整流程开发功能」「先头脑风暴再做规格」时触发。前提：需已安装Superpowers和OpenSpec。
 ---
 
 # HyperSpec
 
-规格驱动 + 工程纪律的完整开发工作流。协调 OpenSpec（规格管理）和 Superpowers（TDD + 子代理审查），从需求到实现到归档一条流程走完。
+规格驱动 + 工程纪律的完整开发工作流。协调 OpenSpec（规格管理）和 Superpowers（brainstorming + TDD + 子代理审查），从想法澄清到需求、实现、归档一条流程走完。
 
 OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得对不对」。HyperSpec 是**纯编排层**，只做状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能。
 
@@ -22,12 +22,13 @@ OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得�
 
 ## 编排协议
 
-HyperSpec 是**纯编排层**，只做以下四件事：
+HyperSpec 是**纯编排层**，只做以下五件事：
 
 1. **项目感知** — 自动探测语言/框架/构建工具，生成 `project_profile` 驱动后续阶段的自适应行为
-2. **状态检测** — 通过结构化状态文件 + 实际文件验证确定当前阶段和断点位置
-3. **阶段路由** — 加载对应 prompt 文件，按其中的流程调用原生 skill
-4. **Commit 纪律** — 每个 task/fix 完成后自动 commit，编译前置，不做 push
+2. **需求发散与收敛** — 在需求模糊时先做 brainstorm，形成可进入规格阶段的收敛摘要
+3. **状态检测** — 通过结构化状态文件 + 实际文件验证确定当前阶段和断点位置
+4. **阶段路由** — 加载对应 prompt 文件，按其中的流程调用原生 skill
+5. **Commit 纪律** — 每个 task/fix 完成后自动 commit，编译前置，不做 push
 
 HyperSpec **不做**：
 
@@ -41,6 +42,7 @@ HyperSpec **不做**：
 
 | 阶段 | 委托 Skill | 职责 |
 |------|-----------|------|
+| brainstorm | `superpowers:brainstorming` 或 inline | 澄清问题空间、目标、非目标、约束、备选方案和推荐方向 |
 | propose | `openspec-propose` | 通过 CLI 创建变更目录 + 生成所有 artifacts（proposal、design、specs、tasks） |
 | propose | `superpowers:writing-plans` | 读取 openspec artifacts，生成 superpowers 格式实现计划 |
 | apply | `superpowers:subagent-driven-development` 或 inline | 按计划执行实现，TDD + 子代理审查 |
@@ -133,8 +135,8 @@ project_profile 不会直接传给 openspec-propose 或 writing-plans（它们�
 ```yaml
 version: 1
 active_change: add-user-auth
-phase: propose | apply | archive
-checkpoint: profiler-done | requirements-confirmed | openspec-generated | plan-generated | plan-generated-and-confirmed | task-N-complete | verified | reviewed | apply-done | consistency-verified | archived | done
+phase: brainstorm | propose | apply | archive
+checkpoint: profiler-done | brainstorm-started | brainstorm-done | requirements-confirmed | openspec-generated | plan-generated | plan-generated-and-confirmed | task-N-complete | verified | reviewed | apply-done | consistency-verified | archived | done
 project_profile:
   languages: [java]
   frameworks: [spring-boot]
@@ -163,12 +165,17 @@ project_profile:
 
 ### Step 1：读取状态文件
 
-- 状态文件不存在 → 这是首次运行，执行项目分析器，然后进入 propose 阶段
+- 状态文件不存在 → 这是首次运行，执行项目分析器，然后根据用户需求清晰度进入 brainstorm 或 propose 阶段
 - 状态文件存在 → 读取 phase 和 checkpoint
 
 ### Step 2：验证状态文件与实际文件一致性
 
 根据状态文件中的 phase，验证对应的前提条件：
+
+**phase = brainstorm 时验证：**
+- `.hyperspec-brainstorm.md` 是否存在且非空？ → 存在则可恢复到 brainstorm 末尾，准备进入 propose
+- 如果已有活跃变更目录或计划文件，说明实际进度已越过 brainstorm，按实际文件状态修正到 propose 或 apply
+- 如果 checkpoint 为 `brainstorm-done` 但收敛摘要不存在或为空，回退到 `brainstorm-started`
 
 **phase = propose 时验证：**
 - `openspec/changes/` 下是否有活跃（非 archive）变更目录？ → 无则一致（propose 刚开始）
@@ -191,6 +198,8 @@ project_profile:
 
 | 状态文件 phase | 验证结果 | 路由到 |
 |---------------|---------|--------|
+| brainstorm | 一致 | brainstorm 阶段（从 checkpoint 恢复） |
+| brainstorm | 已有规格/计划文件 | propose 或 apply 阶段（以实际文件为准） |
 | propose | 一致 | propose 阶段（从 checkpoint 恢复） |
 | propose | 不一致（artifacts 缺失） | propose 阶段（回退 checkpoint） |
 | apply | 一致 | apply 阶段（从 checkpoint 恢复） |
@@ -204,6 +213,7 @@ project_profile:
 
 | 检查项 | 怎么查 | 结果 |
 |--------|--------|------|
+| 有 brainstorm 摘要？ | `.hyperspec-brainstorm.md` 是否存在且非空 | 有且无活跃变更 → propose 阶段（使用摘要作为输入） |
 | 有活跃变更？ | `openspec/changes/` 下是否有非 archive 子目录 | 有 → 继续检查 |
 | 有多个活跃变更？ | 活跃变更数量 > 1 | 是 → 让用户选择继续哪个 |
 | 有计划文件？ | `superpowers/plans/` 下是否有与活跃变更对应的计划文件（文件含 `<!-- hyperspec change: <name> -->`） | 有 → 看实现状态 |
@@ -216,6 +226,7 @@ project_profile:
 
 根据检测结果，用 Read 工具加载对应文件并执行：
 
+- **brainstorm 阶段** → 读取 skill 目录下的 `brainstorm.md`，按其中流程执行
 - **propose 阶段** → 读取 skill 目录下的 `propose.md`，按其中流程执行
 - **apply 阶段** → 读取 skill 目录下的 `apply.md`，按其中流程执行
 - **archive 阶段** → 读取 skill 目录下的 `archive.md`，按其中流程执行
@@ -224,13 +235,15 @@ project_profile:
 
 ## 用户意图覆盖
 
-如果用户明确指定了阶段（如「先做规格」「直接开始实现」「归档收尾」），以用户意图为准，跳过状态检测直接加载对应文件。但如果前置条件不满足（如用户说「直接实现」但 `superpowers/plans/` 下没有计划文件），需要提醒用户先完成前置阶段。
+如果用户明确指定了阶段（如「先头脑风暴」「先做规格」「直接开始实现」「归档收尾」），以用户意图为准，跳过状态检测直接加载对应文件。但如果前置条件不满足（如用户说「直接实现」但 `superpowers/plans/` 下没有计划文件），需要提醒用户先完成前置阶段。
 
 ## 状态文件更新时机
 
 | 时机 | 更新内容 |
 |------|---------|
-| 项目分析器完成 | 写入 `project_profile`，`phase: propose`，`checkpoint: profiler-done` |
+| 项目分析器完成 | 写入 `project_profile`，需求模糊时 `phase: brainstorm`，需求明确时 `phase: propose`，`checkpoint: profiler-done` |
+| brainstorm 开始 | `phase: brainstorm`，`checkpoint: brainstorm-started` |
+| brainstorm 收敛完成 | 写入 `.hyperspec-brainstorm.md`，`phase: propose`，`checkpoint: brainstorm-done` |
 | propose 阶段需求确认完成 | `checkpoint: requirements-confirmed`，`active_change: <变更名>` |
 | openspec-propose 完成 | `checkpoint: openspec-generated` |
 | writing-plans 完成 | `checkpoint: plan-generated` |
