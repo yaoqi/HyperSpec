@@ -19,7 +19,7 @@ OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得�
 - 子代理只在用户明确要求或允许并行/子代理时使用；否则 apply 阶段使用 inline 模式。
 - 自动 commit 是 HyperSpec 的流程纪律，但在 Codex 中应先确认用户接受该纪律；全程不自动 push。
 - 需要项目画像时，优先运行本 skill 自带脚本：`python scripts/profiler.py --root <项目根目录> --write-state`。如需验证编译命令，再追加 `--verify-compile`。
-- 需要判断阶段、断点或下一个可执行节点时，优先运行 DAG 状态计算：`python scripts/dag_status.py --root <项目根目录>`。该脚本读取 `hyperspec-dag.json` 和实际文件状态，输出 OpenSpec 风格的 JSON。
+- 需要判断阶段、断点或下一个可执行节点时，优先运行 DAG 状态计算：`python scripts/dag_status.py --root <项目根目录>`。多变更项目用 `--change <变更名>` 显式指定。该脚本读取 `hyperspec-dag.json` 和实际文件状态，输出 OpenSpec 风格的 JSON；DAG 参考见 `references/dag.md`。
 
 ## 编排协议
 
@@ -174,6 +174,12 @@ python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录>
 
 ```bash
 python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --format mermaid
+```
+
+多活跃变更时使用：
+
+```bash
+python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --change <变更名>
 ```
 
 ### Step 1：按 DAG 路由

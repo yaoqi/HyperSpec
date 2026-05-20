@@ -76,10 +76,11 @@ HyperSpec 的主路由由 OpenSpec 风格的 DAG 状态计算脚本驱动：
 
 ```bash
 python scripts/dag_status.py --root /path/to/project
+python scripts/dag_status.py --root /path/to/project --change add-user-auth
 python scripts/dag_status.py --root /path/to/project --format mermaid
 ```
 
-`dag_status.py` 读取 `hyperspec-dag.json` 和实际文件状态，输出 `nodes`、`next`、`missingDeps`、`isComplete` 等字段。执行 HyperSpec 时优先读取 `next[0]` 选择阶段文件；`.hyperspec-state.yaml` 只作为缓存和兼容旧流程的辅助输入。
+`dag_status.py` 读取 `hyperspec-dag.json` 和实际文件状态，输出 `nodes`、`next`、`missingDeps`、`isComplete` 等字段。执行 HyperSpec 时优先读取 `next[0]` 选择阶段文件；`.hyperspec-state.yaml` 只作为缓存和兼容旧流程的辅助输入。DAG 细节见 [references/dag.md](references/dag.md)。
 
 ## 使用方式
 
@@ -401,6 +402,7 @@ project_profile:
 
 ```bash
 python scripts/dag_status.py --root .
+python scripts/dag_status.py --root . --change add-user-auth
 ```
 
 JSON 输出示例：
@@ -438,6 +440,8 @@ JSON 输出示例：
 ```bash
 python scripts/dag_status.py --root . --format mermaid
 ```
+
+完整 DAG 节点说明和扩展规则见 [references/dag.md](references/dag.md)。
 
 ### 阶段总览
 

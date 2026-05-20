@@ -1,2 +1,5 @@
 __pycache__/
 *.py[cod]
+.tmp-tests/
+tmp_tests/
+manual_test_dir/

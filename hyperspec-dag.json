@@ -1,6 +1,15 @@
 {
   "version": 1,
   "description": "HyperSpec workflow DAG. Nodes are evaluated from filesystem evidence; .hyperspec-state.yaml is only a cache.",
+  "schema": {
+    "nodeRequiredFields": ["id", "phase", "checkpoint", "deps", "outputs", "description"],
+    "nodeOptionalFields": ["optional", "optionalDeps"],
+    "statusValues": ["done", "ready", "blocked"],
+    "edgeTypes": {
+      "deps": "Required dependencies. A node is ready only when all deps are done.",
+      "optionalDeps": "Informational dependencies that enrich context but do not block readiness."
+    }
+  },
   "nodes": [
     {
       "id": "project-profile",

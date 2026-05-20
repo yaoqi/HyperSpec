@@ -84,7 +84,9 @@ def archived_change_dirs(root: Path, change: str | None) -> list[Path]:
     return sorted(dirs)
 
 
-def infer_change(root: Path, state: dict[str, Any]) -> str | None:
+def infer_change(root: Path, state: dict[str, Any], explicit_change: str | None = None) -> str | None:
+    if explicit_change:
+        return explicit_change
     state_change = state.get("active_change")
     if isinstance(state_change, str) and state_change:
         return state_change
@@ -204,10 +206,10 @@ def build_nodes(root: Path, dag: dict[str, Any], state: dict[str, Any], change: 
         ),
         "brainstorm": nonempty_file(brainstorm_path) or bool(archived_brainstorm and nonempty_file(archived_brainstorm)),
         "openspec-artifacts": openspec_artifacts_done(change_dir) or bool(archive_dir),
-        "implementation-plan": plan["exists"] and plan["hasCheckbox"],
-        "implementation": plan["allChecked"],
-        "verification": checkpoint_at_least(state, "verified"),
-        "review": checkpoint_at_least(state, "reviewed"),
+        "implementation-plan": bool((plan["exists"] and plan["hasCheckbox"]) or archive_dir),
+        "implementation": bool(plan["allChecked"] or archive_dir),
+        "verification": bool(checkpoint_at_least(state, "verified") or archive_dir),
+        "review": bool(checkpoint_at_least(state, "reviewed") or archive_dir),
         "consistency": bool((change_dir and nonempty_file(change_dir / ".close-verification-done")) or checkpoint_at_least(state, "consistency-verified") or archive_dir),
         "archive": archive_done,
         "cleanup": archive_done and (not (root / ".hyperspec-state.yaml").exists()) and (not brainstorm_path.exists()),
@@ -236,9 +238,41 @@ def build_nodes(root: Path, dag: dict[str, Any], state: dict[str, Any], change: 
 
 def load_dag(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(read_text(path))
+        dag = json.loads(read_text(path))
     except json.JSONDecodeError as exc:
         raise SystemExit(f"Invalid DAG JSON {path}: {exc}") from exc
+    validate_dag(dag, path)
+    return dag
+
+
+def validate_dag(dag: dict[str, Any], path: Path) -> None:
+    if not isinstance(dag.get("nodes"), list) or not dag["nodes"]:
+        raise SystemExit(f"Invalid DAG JSON {path}: nodes must be a non-empty list")
+    required = set(dag.get("schema", {}).get("nodeRequiredFields", [])) or {
+        "id",
+        "phase",
+        "checkpoint",
+        "deps",
+        "outputs",
+        "description",
+    }
+    seen: set[str] = set()
+    for index, node in enumerate(dag["nodes"]):
+        if not isinstance(node, dict):
+            raise SystemExit(f"Invalid DAG JSON {path}: node #{index} must be an object")
+        missing = sorted(required - set(node))
+        if missing:
+            raise SystemExit(f"Invalid DAG JSON {path}: node #{index} missing {', '.join(missing)}")
+        node_id = node.get("id")
+        if not isinstance(node_id, str) or not node_id:
+            raise SystemExit(f"Invalid DAG JSON {path}: node #{index} has invalid id")
+        if node_id in seen:
+            raise SystemExit(f"Invalid DAG JSON {path}: duplicate node id {node_id}")
+        seen.add(node_id)
+    for node in dag["nodes"]:
+        for dep in node.get("deps", []) + node.get("optionalDeps", []):
+            if dep not in seen:
+                raise SystemExit(f"Invalid DAG JSON {path}: node {node['id']} references unknown dependency {dep}")
 
 
 def mermaid(nodes: list[dict[str, Any]], dag: dict[str, Any]) -> str:
@@ -267,6 +301,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate the HyperSpec DAG.")
     parser.add_argument("--root", default=".", help="Project root to inspect.")
     parser.add_argument("--dag", default=None, help="Path to hyperspec-dag.json.")
+    parser.add_argument("--change", default=None, help="Explicit active change name. Overrides .hyperspec-state.yaml and auto-detection.")
     parser.add_argument("--format", choices=("json", "mermaid"), default="json", help="Output format.")
     args = parser.parse_args()
 
@@ -279,7 +314,7 @@ def main() -> int:
     dag_path = Path(args.dag).resolve() if args.dag else default_dag
     dag = load_dag(dag_path)
     state = parse_state(root)
-    change = infer_change(root, state)
+    change = infer_change(root, state, args.change)
     nodes, facts = build_nodes(root, dag, state, change)
     next_nodes = [node["id"] for node in nodes if node["status"] == "ready"]
 
@@ -289,6 +324,7 @@ def main() -> int:
         "activeChange": change,
         "phase": state.get("phase"),
         "checkpoint": state.get("checkpoint"),
+        "explicitChange": args.change,
         "isComplete": all(node["status"] == "done" or node["optional"] for node in nodes),
         "next": next_nodes,
         "nodes": nodes,
