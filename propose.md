@@ -8,7 +8,15 @@
 
 ### 1. 项目分析（仅首次运行）
 
-如果 `.hyperspec-state.yaml` 不存在或 `project_profile` 为空，执行项目分析器：
+如果 `.hyperspec-state.yaml` 不存在或 `project_profile` 为空，执行项目分析器。
+
+**Codex 优先做法：**
+
+```bash
+python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state
+```
+
+仅当用户允许验证编译命令，或当前任务明确需要先确认编译环境时，追加 `--verify-compile`。如果验证命令因为依赖下载、网络、权限或环境问题失败，按 Codex 权限模型请求授权或暂停等待用户确认。
 
 1. **探测语言和框架**：扫描源码目录的文件扩展名 + 读取依赖配置文件
 2. **识别构建工具**：检测根目录的 `pom.xml`、`build.gradle`、`package.json`、`go.mod`、`Cargo.toml`、`pyproject.toml` 等
@@ -16,7 +24,7 @@
 4. **判断项目结构**：单模块 vs 多模块/monorepo
 5. **检测 CI 配置**：是否有 `.github/workflows/`、`.gitlab-ci.yml`、`Jenkinsfile` 等
 
-分析完成后将 `project_profile` 写入 `.hyperspec-state.yaml`，并更新 `phase: propose`、`checkpoint: profiler-done`。
+分析完成后将 `project_profile` 写入 `.hyperspec-state.yaml`，并更新 `phase: propose`、`checkpoint: profiler-done`。如果脚本不可用，再按下方检测规则手动完成同等分析。
 
 **命令运行时验证**：推导出 compile_command 后，必须实际运行一次验证其可用性。具体规则见 SKILL.md "命令运行时验证"段落。如果验证失败且为环境问题，立即阻塞并报告，等待用户提供正确的命令后再继续。
 
@@ -50,7 +58,7 @@
 **做法：**
 
 1. 宣布："调用 openspec-propose 生成规格文档"
-2. 使用 Skill 工具调用 `openspec-propose`，args 格式：
+2. 使用可用的 Codex skill 机制调用 `openspec-propose`。如果当前 Codex 会话没有该 skill，直接使用下方 CLI 降级方案。args 格式：
    ```
    Change name: <变更名>. Description: [项目: {project_profile.languages} + {project_profile.frameworks}, 构建: {project_profile.build_tool}] <需求描述>
    ```
@@ -89,7 +97,7 @@
    - 第三方库的 import / require 路径是否与直觉不同（如包名重组后的新路径）
    - 构建工具在项目实际环境中的可用命令（如私有仓库可能限制增量编译，必须全量编译）
    - 将验证结果整理为"框架 API 注意事项"列表，附加到 writing-plans 的 args 中
-4. 使用 Skill 工具调用 `superpowers:writing-plans`，args 传入上下文：
+4. 使用可用的 Codex skill 机制调用 `superpowers:writing-plans`。如果当前 Codex 会话没有该 skill，手动创建 `superpowers/plans/YYYY-MM-DD-<变更名>.md`，并严格包含 File Structure、按 `tasks.md` 展开的 checkbox 微步骤、编译/测试约束和 `<!-- hyperspec change: <变更名> -->` 绑定注释。args 传入上下文：
    ```
    变更名: <name>
    项目技术栈: {project_profile.languages} + {project_profile.frameworks}
@@ -104,7 +112,7 @@
    checkbox 唯一性约束:
    - 计划中每个 Step 的 checkbox 描述必须全局唯一，不能仅靠步骤编号区分（如"Step 2: 编译验证"会在多个 Task 中重复）
    - 推荐格式：`- [ ] **Step N: <动作描述>（Task <编号>）**` 或在步骤描述中包含 Task 特有的上下文（如文件名、类名）
-   - 这确保 apply 阶段使用 Edit 工具更新 checkbox 时，old_string 在文件中唯一匹配
+   - 这确保 apply 阶段使用 `apply_patch` 更新 checkbox 时，old_string 在文件中唯一匹配
    框架 API 注意事项:
    <Step 3 中验证的实际 API 签名列表>
    openspec artifacts:

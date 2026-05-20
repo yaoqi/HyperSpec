@@ -9,6 +9,17 @@ description: 规格驱动+工程纪律的完整开发工作流。协调OpenSpec�
 
 OpenSpec 管「做什么和为什么」，Superpowers 管「怎么做和做得对不对」。HyperSpec 是**纯编排层**，只做状态检测、阶段路由、commit 纪律，不重写任何原生 skill 的功能。
 
+## Codex 运行约定
+
+在 Codex 中使用 HyperSpec 时，遵循以下适配规则：
+
+- 文件读取优先用 `rg`、`Get-Content` 等 shell 命令；文件修改优先用 `apply_patch`。
+- 只有当前会话确实安装了对应 skill 时，才按 Codex skills 机制调用 `openspec-propose`、`openspec-archive-change` 或 `superpowers:*`；否则使用本文档中的 CLI 降级流程。
+- Codex 默认不应静默执行网络安装或依赖下载。`npx @fission-ai/openspec ...`、依赖安装、远程访问等如遇网络限制，需要按 Codex 权限模型请求用户授权。
+- 子代理只在用户明确要求或允许并行/子代理时使用；否则 apply 阶段使用 inline 模式。
+- 自动 commit 是 HyperSpec 的流程纪律，但在 Codex 中应先确认用户接受该纪律；全程不自动 push。
+- 需要项目画像时，优先运行本 skill 自带脚本：`python scripts/profiler.py --root <项目根目录> --write-state`。如需验证编译命令，再追加 `--verify-compile`。
+
 ## 编排协议
 
 HyperSpec 是**纯编排层**，只做以下四件事：
@@ -51,7 +62,19 @@ HyperSpec **不做**：
 
 ## 项目分析器（Project Profiler）
 
-前提检查通过后，**在首次运行或状态文件不存在时**，自动扫描项目生成 project_profile。结果保存到 `.hyperspec-state.yaml` 的 `project_profile` 字段。
+前提检查通过后，**在首次运行或状态文件不存在时**，自动扫描项目生成 project_profile。Codex 运行时优先使用 `scripts/profiler.py` 完成扫描，结果保存到 `.hyperspec-state.yaml` 的 `project_profile` 字段。
+
+推荐命令：
+
+```bash
+python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state
+```
+
+如果用户允许验证编译环境，再运行：
+
+```bash
+python <HyperSpec目录>/scripts/profiler.py --root <项目根目录> --write-state --verify-compile
+```
 
 ### 检测逻辑
 

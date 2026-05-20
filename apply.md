@@ -18,6 +18,7 @@
    - 如果 compile_command 为 null（如纯 Python/前端项目），跳过编译检查
    - 如果编译失败且原因是环境问题（如 JDK 版本不匹配、Node 版本不匹配），**立即阻塞并报告**，等待用户确认
    - 如果编译失败是代码问题，正常进入实现阶段（TDD 会逐步修复）
+   - Codex 中如编译命令触发依赖下载、网络访问或写入受限目录，按 Codex 权限模型请求授权；不要用绕过方式规避权限。
 
 ## 智能执行模式选择
 
@@ -73,6 +74,8 @@
 - **子代理只负责写代码和 commit**，**主会话负责进度跟踪**：每个子代理返回后，主会话用 Edit 工具将计划文件中该 Task 的所有 `- [ ]` 改为 `- [x]`，并更新 `.hyperspec-state.yaml` 的 checkpoint 为 `task-N-complete`
 - 如果跳过了 worktree：subagent-driven-development 中 `using-git-worktrees` 的 REQUIRED 可忽略
 
+**Codex 注意：** 只有用户明确要求或允许子代理/并行工作时才使用完整模式。否则即使命中完整模式条件，也降级为轻量模式，并在总结中说明原因。当前 Codex 会话没有 `superpowers:subagent-driven-development` 时，同样降级为轻量模式。
+
 **轻量模式**：
 在当前会话中直接执行：
 - 按 `superpowers/plans/` 下的计划文件逐个 Task 执行
@@ -84,18 +87,19 @@
 无论哪种执行模式，每个 task 完成后必须执行以下流程：
 
 1. **编译检查**：运行 `compile_command`，编译必须通过（如果 compile_command 为 null 则跳过）
-2. **更新 checkbox**：用 Edit 工具将计划文件中**该 Task 下的所有** `- [ ]` 改为 `- [x]`（包括 Verify、Commit 等非实现步骤，不能遗漏）
+2. **更新 checkbox**：用 `apply_patch` 将计划文件中**该 Task 下的所有** `- [ ]` 改为 `- [x]`（包括 Verify、Commit 等非实现步骤，不能遗漏）
 3. **更新状态文件**：更新 `.hyperspec-state.yaml` 的 `checkpoint: task-N-complete`
 4. **自动 commit**：将代码改动 + 计划文件变更 + 状态文件变更一起提交到本地仓库
    - commit message 格式：`<类型>(<范围>): <task描述>`
    - 一个 task 对应一个 commit（包含计划文件和状态文件更新）
    - **全程不做 push 操作**
+   - Codex 中如果用户尚未接受自动 commit 纪律，先停在可提交状态并询问；用户确认后再执行 `git add` / `git commit`
 
 **原子性保证**：先更新 checkbox 和状态文件再 commit，确保三者一致。如果 commit 前中断，重跑时该 Task 会被重新执行（但代码已写入，TDD 测试会直接通过）；如果 commit 后中断，checkpoint 和 checkbox 已更新，重跑时会跳过该 Task。
 
 ### 2. 验证完成
 
-调用 Superpowers 的 `verification-before-completion` skill：
+调用 Superpowers 的 `verification-before-completion` skill；如果当前 Codex 会话没有该 skill，则按下列验证要求 inline 执行：
 - 运行 `test_command`（来自 project_profile），如果 test_command 为 null 则跳过自动化测试
 - 确认结果符合预期
 
@@ -103,7 +107,7 @@
 
 ### 3. 全局审查
 
-全部任务完成后，调用 Superpowers 的 `requesting-code-review` skill 做一轮全局代码审查。
+全部任务完成后，调用 Superpowers 的 `requesting-code-review` skill 做一轮全局代码审查。如果当前 Codex 会话没有该 skill，则以代码 review 姿态 inline 审查本次 diff：优先找 bug、回归风险、缺失测试和规格偏离，并按严重程度列出。
 
 如果审查发现 Critical 或 Important 问题，逐项修复。每个 fix 完成后同样执行提交流程：
 1. 编译检查 → 必须通过

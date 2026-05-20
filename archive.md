@@ -65,7 +65,7 @@
 **做法：**
 
 1. 宣布："调用 openspec-archive-change 归档变更"
-2. 使用 Skill 工具调用 `openspec-archive-change`，args 格式：`<变更名>`
+2. 使用可用的 Codex skill 机制调用 `openspec-archive-change`，args 格式：`<变更名>`。如果当前 Codex 会话没有该 skill，使用下方 CLI/文件操作降级方案。
 3. `openspec-archive-change` 会自动执行：
    - 检查 artifact 完成状态（通过 CLI）
    - 检查 task 完成状态（读 tasks.md）
@@ -74,12 +74,12 @@
    - 展示归档摘要
 4. 等待 skill 完成后，确认归档成功：检查 `openspec/changes/archive/` 下是否有对应目录，且原活跃变更目录已移除
 
-**注意：** `openspec-archive-change` 内部已包含用户确认环节（它用 AskUserQuestion 确认是否继续），不需要 HyperSpec 重复确认。但 Step 1 的验证结果应在调用 archive 前展示给用户。
+**注意：** `openspec-archive-change` 内部可能包含用户确认环节（例如 Claude 环境中的 AskUserQuestion）。在 Codex 中，如果没有对应交互工具，就用简短自然语言向用户确认是否继续归档。但 Step 1 的验证结果应在调用 archive 前展示给用户。
 
 **降级方案：** 如果 `openspec-archive-change` skill 不可用（Skill 工具返回 "Unknown skill"），手动执行归档操作：
 1. 确认 `openspec/changes/<变更名>/tasks.md` 中所有任务已标记为完成
-2. 运行 `mkdir -p openspec/changes/archive` 确保归档目录存在
-3. 运行 `mv openspec/changes/<变更名> openspec/changes/archive/$(date +%Y-%m-%d)-<变更名>` 执行归档
+2. 确保 `openspec/changes/archive` 目录存在。在 Codex/Windows 中优先使用 PowerShell `New-Item -ItemType Directory -Force`。
+3. 将 `openspec/changes/<变更名>` 移动到 `openspec/changes/archive/<YYYY-MM-DD>-<变更名>`。在 Codex/Windows 中优先使用 PowerShell `Move-Item -LiteralPath ...`，移动前验证源路径和目标路径都位于项目根目录内。
 4. 确认归档成功：活跃变更目录已移除，archive 目录已创建
 
 完成后更新 `.hyperspec-state.yaml`：`checkpoint: archived`。
@@ -105,7 +105,7 @@
 - 归档位置
 
 **清理状态文件：**
-更新 `.hyperspec-state.yaml`：`checkpoint: done`。使用 `git rm .hyperspec-state.yaml` 将其从 git 追踪中移除，然后 commit（message: `chore: hyperspec <变更名> 完成`）。确保工作区干净。
+更新 `.hyperspec-state.yaml`：`checkpoint: done`。如果用户接受 HyperSpec 自动 commit 纪律，使用 `git rm .hyperspec-state.yaml` 将其从 git 追踪中移除，然后 commit（message: `chore: hyperspec <变更名> 完成`）。如果用户未确认自动 commit，则停在可提交状态并报告需要提交的文件。
 
 ## 出口条件
 

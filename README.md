@@ -47,6 +47,30 @@ cp -r hyperspec .cursor/skills/hyperspec
 cp -r hyperspec ~/.codex/skills/hyperspec
 ```
 
+## Codex 适配
+
+HyperSpec 在 Codex 中按同一套三阶段流程运行，但执行动作需要映射到 Codex 的本地工具：
+
+| 原文动作 | Codex 中的做法 |
+|---------|---------------|
+| 读取文件 | 使用 shell 的 `Get-Content`/`rg`，或直接按 Codex skill 规则读取 |
+| 写/改文件 | 手工小改使用 `apply_patch`；格式化、批量机械改写可用项目自带工具 |
+| 调用原生 skill | 如果 Codex 当前会话有对应 skill，按 Codex skills 规则加载；没有则按文档中的 CLI 降级方案执行 |
+| AskUserQuestion | 在 Default 模式下尽量自主判断；必须确认时用简短自然语言提问 |
+| 子代理实现/审查 | 只有用户明确允许并行/子代理时使用 Codex sub-agent；否则使用 inline 模式 |
+| 运行网络命令 | 如 `npx`、依赖安装、远程访问失败，需要按 Codex 权限模型请求升级 |
+| 自动 commit | 仅在用户要求或明确接受 HyperSpec 自动提交纪律时执行；默认不 push |
+
+Codex 版新增了一个无第三方依赖的项目分析脚本：
+
+```bash
+python scripts/profiler.py --root /path/to/project
+python scripts/profiler.py --root /path/to/project --write-state
+python scripts/profiler.py --root /path/to/project --write-state --verify-compile
+```
+
+默认只输出 JSON，不修改项目。加 `--write-state` 后会在目标项目根目录生成 `.hyperspec-state.yaml`。加 `--verify-compile` 后会实际运行推导出的编译命令；如果该命令需要下载依赖或访问网络，Codex 需要先获得用户授权。
+
 ## 使用方式
 
 在 Claude Code / Cursor / Codex 对话中输入：
