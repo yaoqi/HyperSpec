@@ -44,6 +44,25 @@
 2. `hyperspec-dag.json`
 3. `.hyperspec-state.yaml`
 
+## 多变更状态
+
+`.hyperspec-state.yaml` 支持按变更分区：
+
+```yaml
+active_change: add-user-auth
+phase: apply
+checkpoint: reviewed
+changes:
+  add-user-auth:
+    phase: apply
+    checkpoint: reviewed
+  add-billing:
+    phase: propose
+    checkpoint: openspec-generated
+```
+
+`dag_status.py --change <name>` 会优先读取 `changes.<name>`，再回退到顶层 `phase/checkpoint`。顶层字段保留为默认变更和旧格式兼容入口。
+
 ## 扩展原则
 
 - 新增节点时先补 `hyperspec-dag.json`

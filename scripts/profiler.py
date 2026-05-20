@@ -291,8 +291,17 @@ def state_yaml(profile: dict[str, Any], active_change: str | None) -> str:
         f"active_change: {yaml_scalar(active_change)}",
         "phase: propose",
         "checkpoint: profiler-done",
-        "project_profile:",
     ]
+    if active_change:
+        lines.extend(
+            [
+                "changes:",
+                f"  {active_change}:",
+                "    phase: propose",
+                "    checkpoint: profiler-done",
+            ]
+        )
+    lines.append("project_profile:")
     for key in ("languages", "frameworks", "build_tool", "compile_command", "test_command", "structure", "has_ci"):
         lines.append(f"  {key}: {yaml_scalar(profile.get(key))}")
     lines.append("  command_availability:")

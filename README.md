@@ -248,8 +248,15 @@ python scripts/dag_status.py --root <项目根目录>
 ```yaml
 version: 1
 active_change: add-user-auth
-phase: apply
-checkpoint: task-3-complete
+phase: apply                  # 兼容旧流程/默认变更
+checkpoint: task-3-complete   # 兼容旧流程/默认变更
+changes:
+  add-user-auth:
+    phase: apply
+    checkpoint: task-3-complete
+  add-billing:
+    phase: propose
+    checkpoint: openspec-generated
 project_profile:
   languages: [java]
   frameworks: [spring-boot]
@@ -259,6 +266,8 @@ project_profile:
   structure: single-module
   has_ci: true
 ```
+
+多变更并行时，`changes.<change>` 是该变更的状态分区；`--change <变更名>` 会让 DAG 状态计算优先读取对应分区，避免一份顶层 `phase/checkpoint` 被多个变更互相覆盖。
 
 **安全策略**：DAG 状态由实际文件证据计算；状态文件只是缓存。两者冲突时，以 `dag_status.py` 基于文件系统得出的结果为准。
 
@@ -386,6 +395,13 @@ version: 1
 active_change: add-user-auth
 phase: brainstorm | propose | apply | archive
 checkpoint: ...
+changes:
+  add-user-auth:
+    phase: apply
+    checkpoint: task-3-complete
+  add-billing:
+    phase: propose
+    checkpoint: openspec-generated
 project_profile:
   languages: [...]
   frameworks: [...]
@@ -395,6 +411,8 @@ project_profile:
   structure: ...
   has_ci: ...
 ```
+
+`changes` 是多变更并行时的状态隔离层。`dag_status.py --change add-billing` 会使用 `changes.add-billing.phase/checkpoint`，并在输出中返回 `"changeScoped": true`；没有对应分区时才回退到顶层 `phase/checkpoint`。
 
 核心原则：**DAG 计算结果是主路由，状态文件只是缓存，实际文件是 ground truth**。如果状态文件和文件系统冲突，以 `dag_status.py` 基于文件系统得出的结果为准。
 

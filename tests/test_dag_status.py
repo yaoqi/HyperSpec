@@ -104,6 +104,36 @@ class DagStatusTests(unittest.TestCase):
         self.assertEqual(self.node(payload, "cleanup")["status"], "done")
         self.assertTrue(payload["isComplete"])
 
+    def test_change_scoped_state_overrides_top_level_checkpoint(self) -> None:
+        with self.temp_project("change-scoped-state") as root:
+            write(
+                root / ".hyperspec-state.yaml",
+                "\n".join(
+                    [
+                        "version: 1",
+                        "active_change: add-login",
+                        "phase: apply",
+                        "checkpoint: verified",
+                        "changes:",
+                        "  add-login:",
+                        "    phase: apply",
+                        "    checkpoint: reviewed",
+                        "  add-billing:",
+                        "    phase: apply",
+                        "    checkpoint: plan-generated-and-confirmed",
+                        "project_profile:",
+                        "  languages: [python]",
+                    ]
+                ),
+            )
+            payload = self.run_status(root, "--change", "add-billing")
+
+        self.assertEqual(payload["activeChange"], "add-billing")
+        self.assertTrue(payload["changeScoped"])
+        self.assertEqual(payload["checkpoint"], "plan-generated-and-confirmed")
+        self.assertEqual(self.node(payload, "verification")["status"], "blocked")
+        self.assertEqual(self.node(payload, "review")["status"], "blocked")
+
 
 if __name__ == "__main__":
     unittest.main()

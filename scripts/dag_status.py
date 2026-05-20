@@ -47,20 +47,55 @@ def nonempty_file(path: Path) -> bool:
 
 def parse_state(root: Path) -> dict[str, Any]:
     path = root / ".hyperspec-state.yaml"
-    state: dict[str, Any] = {"exists": path.exists(), "path": str(path)}
+    state: dict[str, Any] = {"exists": path.exists(), "path": str(path), "changes": {}}
     if not path.exists():
         return state
 
+    in_changes = False
+    current_change: str | None = None
     for raw_line in read_text(path).splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#") or ":" not in raw_line:
+            continue
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        line = raw_line.strip()
+        key, value = line.split(":", 1)
+        key = key.strip().strip("'\"")
+        value = value.strip().strip("'\"")
+
+        if indent == 0:
+            in_changes = key == "changes"
+            current_change = None
+            if key in {"active_change", "phase", "checkpoint"}:
+                state[key] = None if value in {"", "null", "~"} else value
+            continue
+
+        if in_changes and indent == 2:
+            current_change = key
+            state["changes"].setdefault(current_change, {})
+            continue
+
+        if in_changes and indent >= 4 and current_change and key in {"phase", "checkpoint"}:
+            state["changes"][current_change][key] = None if value in {"", "null", "~"} else value
+            continue
+
         line = raw_line.strip()
         if not line or line.startswith("#") or ":" not in line:
             continue
-        key, value = line.split(":", 1)
-        key = key.strip()
-        value = value.strip().strip("'\"")
         if key in {"active_change", "phase", "checkpoint"}:
             state[key] = None if value in {"", "null", "~"} else value
     return state
+
+
+def state_for_change(state: dict[str, Any], change: str | None) -> dict[str, Any]:
+    scoped = dict(state)
+    scoped["changeScoped"] = False
+    if not change:
+        return scoped
+    change_state = state.get("changes", {}).get(change)
+    if isinstance(change_state, dict):
+        scoped.update({key: value for key, value in change_state.items() if key in {"phase", "checkpoint"}})
+        scoped["changeScoped"] = True
+    return scoped
 
 
 def active_change_dirs(root: Path) -> list[Path]:
@@ -315,6 +350,7 @@ def main() -> int:
     dag = load_dag(dag_path)
     state = parse_state(root)
     change = infer_change(root, state, args.change)
+    state = state_for_change(state, change)
     nodes, facts = build_nodes(root, dag, state, change)
     next_nodes = [node["id"] for node in nodes if node["status"] == "ready"]
 
@@ -325,6 +361,7 @@ def main() -> int:
         "phase": state.get("phase"),
         "checkpoint": state.get("checkpoint"),
         "explicitChange": args.change,
+        "changeScoped": state.get("changeScoped", False),
         "isComplete": all(node["status"] == "done" or node["optional"] for node in nodes),
         "next": next_nodes,
         "nodes": nodes,

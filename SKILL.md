@@ -136,8 +136,15 @@ project_profile 不会直接传给 openspec-propose 或 writing-plans（它们�
 ```yaml
 version: 1
 active_change: add-user-auth
-phase: brainstorm | propose | apply | archive
+phase: brainstorm | propose | apply | archive   # 兼容旧流程/默认变更
 checkpoint: profiler-done | brainstorm-started | brainstorm-done | requirements-confirmed | openspec-generated | plan-generated | plan-generated-and-confirmed | task-N-complete | verified | reviewed | apply-done | consistency-verified | archived | done
+changes:
+  add-user-auth:
+    phase: apply
+    checkpoint: task-3-complete
+  add-billing:
+    phase: propose
+    checkpoint: openspec-generated
 project_profile:
   languages: [java]
   frameworks: [spring-boot]
@@ -147,6 +154,8 @@ project_profile:
   structure: single-module
   has_ci: true
 ```
+
+多变更并行时，`changes.<change>` 是该变更的状态分区；顶层 `phase/checkpoint` 只作为旧格式兼容和默认路由缓存。运行 `dag_status.py --change <变更名>` 时，脚本优先读取对应分区，再回退到顶层字段。
 
 ### 安全策略：状态文件 vs 实际文件
 
@@ -270,19 +279,25 @@ python <HyperSpec目录>/scripts/dag_status.py --root <项目根目录> --change
 
 ## 状态文件更新时机
 
+更新规则：
+
+- 若存在 `active_change` 或本轮已经确定变更名，所有阶段推进必须写入 `changes.<active_change>.phase/checkpoint`。
+- 顶层 `phase/checkpoint` 只作为默认变更缓存和旧格式兼容；更新当前默认变更时可以同步更新顶层字段，但不要只更新顶层字段。
+- 无明确变更名前（例如首次项目分析、brainstorm 尚未收敛）可以只更新顶层 `phase/checkpoint`。
+
 | 时机 | 更新内容 |
 |------|---------|
-| 项目分析器完成 | 写入 `project_profile`，需求模糊时 `phase: brainstorm`，需求明确时 `phase: propose`，`checkpoint: profiler-done` |
-| brainstorm 开始 | `phase: brainstorm`，`checkpoint: brainstorm-started` |
-| brainstorm 收敛完成 | 写入 `.hyperspec-brainstorm.md`，`phase: propose`，`checkpoint: brainstorm-done` |
-| propose 阶段需求确认完成 | `checkpoint: requirements-confirmed`，`active_change: <变更名>` |
-| openspec-propose 完成 | `checkpoint: openspec-generated` |
-| writing-plans 完成 | `checkpoint: plan-generated` |
-| propose 用户确认进入 apply | `phase: apply`，`checkpoint: plan-generated-and-confirmed` |
-| apply 阶段每个 task 完成 | `checkpoint: task-N-complete` |
-| apply 验证通过 | `checkpoint: verified` |
-| apply 审查通过 | `checkpoint: reviewed` |
-| apply 最终确认完成 | `phase: archive`，`checkpoint: apply-done` |
-| archive 一致性验证通过 | `checkpoint: consistency-verified` |
-| archive 归档完成 | `checkpoint: archived` |
-| archive 全部完成 | 将 `.hyperspec-brainstorm.md` 移动到归档目录的 `brainstorm.md`（若存在），`checkpoint: done`，删除状态文件 |
+| 项目分析器完成 | 写入 `project_profile`；无变更名时更新顶层 `phase/checkpoint`；有 `active_change` 时同时初始化 `changes.<active_change>: { phase: propose, checkpoint: profiler-done }` |
+| brainstorm 开始 | 无变更名时更新顶层 `phase: brainstorm`、`checkpoint: brainstorm-started` |
+| brainstorm 收敛完成 | 写入 `.hyperspec-brainstorm.md`；无变更名时更新顶层 `phase: propose`、`checkpoint: brainstorm-done` |
+| propose 阶段需求确认完成 | 设置 `active_change: <变更名>`，并写入 `changes.<变更名>: { phase: propose, checkpoint: requirements-confirmed }`；可同步顶层默认缓存 |
+| openspec-propose 完成 | 更新 `changes.<active_change>.checkpoint: openspec-generated` |
+| writing-plans 完成 | 更新 `changes.<active_change>.checkpoint: plan-generated` |
+| propose 用户确认进入 apply | 更新 `changes.<active_change>.phase: apply`、`changes.<active_change>.checkpoint: plan-generated-and-confirmed` |
+| apply 阶段每个 task 完成 | 更新 `changes.<active_change>.checkpoint: task-N-complete` |
+| apply 验证通过 | 更新 `changes.<active_change>.checkpoint: verified` |
+| apply 审查通过 | 更新 `changes.<active_change>.checkpoint: reviewed` |
+| apply 最终确认完成 | 更新 `changes.<active_change>.phase: archive`、`changes.<active_change>.checkpoint: apply-done` |
+| archive 一致性验证通过 | 更新 `changes.<active_change>.checkpoint: consistency-verified` |
+| archive 归档完成 | 更新 `changes.<active_change>.checkpoint: archived` |
+| archive 全部完成 | 将 `.hyperspec-brainstorm.md` 移动到归档目录的 `brainstorm.md`（若存在），更新 `changes.<active_change>.checkpoint: done`，然后清理该变更分区；若无其他活跃变更，再删除状态文件 |
